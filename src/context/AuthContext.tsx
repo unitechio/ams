@@ -6,6 +6,8 @@ interface AuthContextValue {
   user: UserInfo | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  mustChangePassword: boolean;
+  clearMustChangePassword: () => void;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
   hasRole: (role: string) => boolean;
@@ -16,6 +18,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   const logout = useCallback(() => {
     authApi.logout().catch(() => { });
@@ -56,6 +59,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('refresh_token', resp.refresh_token);
     setUser(resp.user);
     initPermissionService(resp.user.permissions);
+    // Handle one-time / forced password change
+    if (resp.one_time_password || resp.require_password_change) {
+      setMustChangePassword(true);
+    }
   }, []);
 
   const hasRole = useCallback(
@@ -71,7 +78,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated: !!user, isLoading, login, logout, hasRole }}
+      value={{
+        user,
+        isAuthenticated: !!user,
+        isLoading,
+        mustChangePassword,
+        clearMustChangePassword: () => setMustChangePassword(false),
+        login,
+        logout,
+        hasRole,
+      }}
     >
       {children}
     </AuthContext.Provider>

@@ -4,17 +4,42 @@ const BASE_URL = '/api/v1';
 
 let _accessToken: string | null = localStorage.getItem('access_token');
 let _onUnauthorized: (() => void) | null = null;
+// Prevent multiple concurrent logout triggers
+let _unauthorizedHandled = false;
 
 export function setToken(token: string | null) {
   _accessToken = token;
-  if (token) localStorage.setItem('access_token', token);
-  else localStorage.removeItem('access_token');
+  if (token) {
+    localStorage.setItem('access_token', token);
+    _unauthorizedHandled = false; // reset on new login
+  } else {
+    localStorage.removeItem('access_token');
+  }
 }
 
 export function getToken() { return _accessToken; }
 
 export function onUnauthorized(cb: () => void) { _onUnauthorized = cb; }
 
+/**
+ * Direct fetch for auth endpoints (login, refresh).
+ * Does NOT use the global 401 interceptor to avoid logout loops.
+ */
+async function authRequest<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({ success: false, error: 'Lỗi phân tích dữ liệu' }));
+  if (!res.ok || !json.success) throw new Error(json.error || 'Lỗi không xác định');
+  return json.data as T;
+}
+
+/**
+ * Standard request for protected endpoints.
+ * On 401: attempts token refresh once, then triggers onUnauthorized (logout).
+ */
 async function request<T>(
   method: string,
   path: string,
@@ -33,7 +58,11 @@ async function request<T>(
   if (res.status === 401 && !retried) {
     const refreshed = await tryRefresh();
     if (refreshed) return request<T>(method, path, body, true);
-    _onUnauthorized?.();
+    // Only trigger once to avoid reload loops
+    if (!_unauthorizedHandled) {
+      _unauthorizedHandled = true;
+      _onUnauthorized?.();
+    }
     throw new Error('Phiên đăng nhập hết hạn');
   }
 
@@ -53,6 +82,7 @@ async function tryRefresh(): Promise<boolean> {
     });
     if (!res.ok) return false;
     const json = await res.json();
+    if (!json.success || !json.data) return false;
     const data = json.data as LoginResponse;
     setToken(data.access_token);
     localStorage.setItem('refresh_token', data.refresh_token);
@@ -68,9 +98,11 @@ const del  = <T>(path: string)               => request<T>('DELETE', path);
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LoginResponse {
-  access_token:  string;
-  refresh_token: string;
-  user:          UserInfo;
+  access_token:     string;
+  refresh_token:    string;
+  user:             UserInfo;
+  one_time_password?: boolean; // true = user must change password on first login
+  require_password_change?: boolean; // alias from some backends
 }
 
 export interface UserInfo {
@@ -155,8 +187,10 @@ export interface ApiMenu {
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
 export const authApi = {
+  // Use authRequest (no global 401 interceptor) so wrong-password errors
+  // don't accidentally trigger the session-expired logout handler.
   login: (username: string, password: string) =>
-    post<LoginResponse>('/auth/login', { username, password }),
+    authRequest<LoginResponse>('POST', '/auth/login', { username, password }),
   logout: () =>
     post<void>('/auth/logout', {}),
   me: () =>

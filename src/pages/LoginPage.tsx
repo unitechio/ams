@@ -1,16 +1,17 @@
-import React, { useState } from 'react';
-import { Shield, Eye, EyeOff, Loader2, Mail, KeyRound, ArrowLeft, Lock, Fingerprint, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Shield, Eye, EyeOff, Loader2, Mail, KeyRound, ArrowLeft, Lock, Fingerprint, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { authApi } from '@/lib/api';
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, mustChangePassword, clearMustChangePassword } = useAuth();
   const navigate = useNavigate();
   
-  const [step, setStep] = useState<'login' | '2fa' | 'forgot_password' | 'reset_sent'>('login');
+  const [step, setStep] = useState<'login' | '2fa' | 'change_password' | 'forgot_password' | 'reset_sent'>('login');
   
   // Login State
   const [username, setUsername] = useState('');
@@ -22,17 +23,27 @@ export default function LoginPage() {
   
   // Forgot Password State
   const [email, setEmail] = useState('');
+
+  // Force Change Password State
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   
   // General State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [failCount, setFailCount] = useState(0);
 
+  // When AuthContext signals mustChangePassword (e.g. after successful login)
+  useEffect(() => {
+    if (mustChangePassword) setStep('change_password');
+  }, [mustChangePassword]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
-    // Simulate Bruteforce block
     if (failCount >= 5) {
       setError('Tài khoản đã bị tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 15 phút.');
       return;
@@ -40,25 +51,56 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      // Mock logic for step-up authentication requirement
       if (username === 'superadmin' && step === 'login') {
-        // Assume superadmin requires 2FA
         setStep('2fa');
         setLoading(false);
         return;
       }
 
       if (step === '2fa') {
-        if (otp.length !== 6) {
-          throw new Error('Mã OTP không hợp lệ');
-        }
+        if (otp.length !== 6) throw new Error('Mã OTP không hợp lệ');
       }
 
       await login(username, password);
+      // mustChangePassword effect will handle redirect if needed
+      // otherwise go to dashboard
       navigate('/');
     } catch (err: unknown) {
       setFailCount(f => f + 1);
-      setError(err instanceof Error ? err.message : 'Đăng nhập thất bại');
+      const msg = err instanceof Error ? err.message : 'Đăng nhập thất bại';
+      // Map common backend error messages to Vietnamese
+      if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('wrong')) {
+        setError('Tên đăng nhập hoặc mật khẩu không chính xác.');
+      } else if (msg.toLowerCase().includes('locked') || msg.toLowerCase().includes('disabled')) {
+        setError('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.');
+      } else if (msg.toLowerCase().includes('inactive')) {
+        setError('Tài khoản chưa được kích hoạt. Vui lòng liên hệ quản trị viên.');
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForceChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (newPassword.length < 6) {
+      setError('Mật khẩu mới phải có ít nhất 6 ký tự.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Mật khẩu xác nhận không khớp.');
+      return;
+    }
+    setLoading(true);
+    try {
+      await authApi.changePassword(password, newPassword);
+      clearMustChangePassword();
+      navigate('/');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Đổi mật khẩu thất bại');
     } finally {
       setLoading(false);
     }
@@ -207,6 +249,99 @@ export default function LoginPage() {
               <button type="button" onClick={() => { setStep('login'); setOtp(''); setError(''); }} className="w-full text-sm text-slate-500 hover:text-slate-700 flex items-center justify-center gap-1">
                 <ArrowLeft className="w-4 h-4" /> Quay lại đăng nhập
               </button>
+            </form>
+          )}
+
+          {step === 'change_password' && (
+            <form onSubmit={handleForceChangePassword} className="p-8 space-y-5">
+              <div className="text-center mb-2">
+                <div className="w-14 h-14 bg-amber-50 border-2 border-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                  <Lock className="w-7 h-7 text-amber-600" />
+                </div>
+                <h2 className="text-lg font-bold text-slate-800">Đổi mật khẩu bắt buộc</h2>
+                <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">
+                  Tài khoản của bạn đang dùng <strong>mật khẩu tạm thời</strong>.<br />
+                  Vui lòng đặt mật khẩu mới để tiếp tục.
+                </p>
+              </div>
+
+              {/* New Password */}
+              <div className="space-y-1.5">
+                <Label htmlFor="new_pw">Mật khẩu mới <span className="text-red-500">*</span></Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="new_pw"
+                    type={showNew ? 'text' : 'password'}
+                    placeholder="Ít nhất 6 ký tự"
+                    value={newPassword}
+                    onChange={e => setNewPassword(e.target.value)}
+                    className="pl-9 pr-10 h-11"
+                    required
+                    autoFocus
+                  />
+                  <button type="button" onClick={() => setShowNew(v => !v)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors">
+                    {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm Password */}
+              <div className="space-y-1.5">
+                <Label htmlFor="confirm_pw">Xác nhận mật khẩu mới <span className="text-red-500">*</span></Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                  <Input
+                    id="confirm_pw"
+                    type={showConfirm ? 'text' : 'password'}
+                    placeholder="Nhập lại mật khẩu mới"
+                    value={confirmPassword}
+                    onChange={e => setConfirmPassword(e.target.value)}
+                    className={`pl-9 pr-10 h-11 ${confirmPassword && newPassword !== confirmPassword ? 'border-red-300 focus-visible:ring-red-400' : ''}`}
+                    required
+                  />
+                  <button type="button" onClick={() => setShowConfirm(v => !v)}
+                    className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 transition-colors">
+                    {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {confirmPassword && newPassword !== confirmPassword && (
+                  <p className="text-xs text-red-500 flex items-center gap-1 mt-1">
+                    <AlertCircle className="w-3 h-3" /> Mật khẩu xác nhận không khớp
+                  </p>
+                )}
+                {confirmPassword && newPassword === confirmPassword && newPassword.length >= 6 && (
+                  <p className="text-xs text-emerald-600 flex items-center gap-1 mt-1">
+                    <CheckCircle2 className="w-3 h-3" /> Mật khẩu khớp
+                  </p>
+                )}
+              </div>
+
+              {error && (
+                <div className="flex items-start gap-2 bg-red-50 border border-red-100 rounded-lg px-4 py-3 text-sm text-red-600">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-white font-semibold"
+                disabled={loading || newPassword.length < 6 || newPassword !== confirmPassword}
+              >
+                {loading
+                  ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Đang lưu...</>
+                  : 'Đặt mật khẩu mới & Tiếp tục'
+                }
+              </Button>
+
+              {/* Password strength hints */}
+              <ul className="text-[11px] text-slate-400 space-y-0.5 pl-4 list-disc">
+                <li className={newPassword.length >= 6 ? 'text-emerald-500' : ''}>Ít nhất 6 ký tự</li>
+                <li className={/[A-Z]/.test(newPassword) ? 'text-emerald-500' : ''}>Có ít nhất 1 chữ hoa</li>
+                <li className={/[0-9]/.test(newPassword) ? 'text-emerald-500' : ''}>Có ít nhất 1 chữ số</li>
+              </ul>
             </form>
           )}
 
