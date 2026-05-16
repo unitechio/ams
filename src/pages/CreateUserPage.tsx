@@ -217,10 +217,13 @@ export default function CreateUserPage() {
               </div>
 
               <div className="space-y-4 pt-2 border-t border-slate-50">
+                {/* One-time password — core feature, always enabled */}
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label className="text-[13px] font-semibold text-slate-800">Đổi MK lần đầu</Label>
-                    <p className="text-[11px] text-slate-400">Yêu cầu sau khi login</p>
+                    <p className="text-[11px] text-slate-400">
+                      User phải đổi mật khẩu ngay sau lần đăng nhập đầu tiên.
+                    </p>
                   </div>
                   <Switch
                     checked={form.one_time_password}
@@ -228,26 +231,42 @@ export default function CreateUserPage() {
                   />
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-[13px] font-semibold text-slate-800">Xác thực OTP</Label>
-                    <p className="text-[11px] text-slate-400">Dùng cho mỗi phiên mới</p>
+                {/* Separator + backend-required note */}
+                <div className="pt-2 border-t border-slate-50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-[9px] font-black uppercase tracking-widest text-amber-500 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
+                      Yêu cầu cấu hình BE
+                    </span>
+                    <div className="flex-1 h-px bg-slate-100" />
                   </div>
-                  <Switch
-                    checked={form.require_otp}
-                    onCheckedChange={v => setForm(f => ({ ...f, require_otp: v }))}
-                  />
-                </div>
 
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-[13px] font-semibold text-slate-800">Bật 2FA (TOTP)</Label>
-                    <p className="text-[11px] text-slate-400">Dùng ứng dụng xác thực</p>
+                  <div className="space-y-4 opacity-80">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-[13px] font-semibold text-slate-700">Xác thực OTP</Label>
+                        <p className="text-[11px] text-slate-400">
+                          Gửi mã OTP qua email/SMS mỗi phiên (cần cấu hình provider).
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.require_otp}
+                        onCheckedChange={v => setForm(f => ({ ...f, require_otp: v }))}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-[13px] font-semibold text-slate-700">Bật 2FA (TOTP)</Label>
+                        <p className="text-[11px] text-slate-400">
+                          Dùng ứng dụng Authenticator. User cần tự setup 2FA sau khi đăng nhập.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.two_factor_enabled}
+                        onCheckedChange={v => setForm(f => ({ ...f, two_factor_enabled: v }))}
+                      />
+                    </div>
                   </div>
-                  <Switch
-                    checked={form.two_factor_enabled}
-                    onCheckedChange={v => setForm(f => ({ ...f, two_factor_enabled: v }))}
-                  />
                 </div>
               </div>
 
