@@ -10,7 +10,37 @@ import { PERMISSION_LABELS } from '@/auth/permissions';
 import { usePermission } from '@/auth/usePermission';
 import { PageHeader } from '@/components/layout/PageHeader';
 
+interface PasswordInputProps {
+  label: string;
+  value: string;
+  onChange: (val: string) => void;
+  show: boolean;
+  toggle: () => void;
+  placeholder?: string;
+}
+
+const PasswordInput = ({ label, value, onChange, show, toggle, placeholder }: PasswordInputProps) => (
+  <div className="space-y-1.5">
+    <Label className="dark:text-slate-400">{label}</Label>
+    <div className="relative">
+      <Lock className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 dark:text-slate-500" />
+      <Input
+        type={show ? 'text' : 'password'}
+        placeholder={placeholder || '••••••••'}
+        className="pl-8 pr-9 dark:bg-slate-950 dark:border-slate-800"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+      <button type="button" onClick={toggle}
+        className="absolute right-2.5 top-2.5 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+        {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+      </button>
+    </div>
+  </div>
+);
+
 export default function SettingsPage() {
+
   const { user } = useAuth();
   const { isSuperAdmin } = usePermission();
 
@@ -114,28 +144,8 @@ export default function SettingsPage() {
     } finally { setSaving(false); }
   };
 
-  const PasswordInput = ({ label, field, show, toggle, placeholder }: {
-    label: string; field: keyof typeof pwForm;
-    show: boolean; toggle: () => void; placeholder?: string;
-  }) => (
-    <div className="space-y-1.5">
-      <Label className="dark:text-slate-400">{label}</Label>
-      <div className="relative">
-        <Lock className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 dark:text-slate-500" />
-        <Input
-          type={show ? 'text' : 'password'}
-          placeholder={placeholder || '••••••••'}
-          className="pl-8 pr-9 dark:bg-slate-950 dark:border-slate-800"
-          value={pwForm[field]}
-          onChange={e => setPwForm(f => ({ ...f, [field]: e.target.value }))}
-        />
-        <button type="button" onClick={toggle}
-          className="absolute right-2.5 top-2.5 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
-          {show ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      </div>
-    </div>
-  );
+  // Note: PasswordInput has been moved outside the component to prevent focus loss issues.
+
 
   return (
     <div className="space-y-6">
@@ -231,12 +241,28 @@ export default function SettingsPage() {
             <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">Đổi mật khẩu</p>
           </div>
           <form onSubmit={handleChangePassword} className="p-5 space-y-4">
-            <PasswordInput label="Mật khẩu hiện tại" field="old_password"
-              show={showPw.old} toggle={() => setShowPw(s => ({ ...s, old: !s.old }))} />
-            <PasswordInput label="Mật khẩu mới (≥ 6 ký tự)" field="new_password"
-              show={showPw.new_} toggle={() => setShowPw(s => ({ ...s, new_: !s.new_ }))} placeholder="Ít nhất 6 ký tự" />
-            <PasswordInput label="Xác nhận mật khẩu mới" field="confirm"
-              show={showPw.confirm} toggle={() => setShowPw(s => ({ ...s, confirm: !s.confirm }))} />
+            <PasswordInput
+              label="Mật khẩu hiện tại"
+              value={pwForm.old_password}
+              onChange={val => setPwForm(f => ({ ...f, old_password: val }))}
+              show={showPw.old}
+              toggle={() => setShowPw(s => ({ ...s, old: !s.old }))}
+            />
+            <PasswordInput
+              label="Mật khẩu mới (≥ 6 ký tự)"
+              value={pwForm.new_password}
+              onChange={val => setPwForm(f => ({ ...f, new_password: val }))}
+              show={showPw.new_}
+              toggle={() => setShowPw(s => ({ ...s, new_: !s.new_ }))}
+              placeholder="Ít nhất 6 ký tự"
+            />
+            <PasswordInput
+              label="Xác nhận mật khẩu mới"
+              value={pwForm.confirm}
+              onChange={val => setPwForm(f => ({ ...f, confirm: val }))}
+              show={showPw.confirm}
+              toggle={() => setShowPw(s => ({ ...s, confirm: !s.confirm }))}
+            />
 
             {pwError && (
               <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2.5 border border-red-100 dark:border-red-900/50">

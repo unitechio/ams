@@ -80,8 +80,16 @@ export function buildPermissionMenu(flat: Omit<MenuNode, 'children'>[]): MenuNod
     nodes.forEach(n => n.children?.length && sortNodes(n.children));
   };
   sortNodes(roots);
-  return roots;
+  
+  // Filter out top-level categories that have no visible children
+  return roots.filter(root => {
+    // If it's a real link, keep it
+    if (root.url !== "#") return true;
+    // If it's a category (#), only keep if it has children
+    return root.children && root.children.length > 0;
+  });
 }
+
 
 export function getVisibleNavItems(): Omit<MenuNode, 'children'>[] {
   // We want to return flat list but only those that are either roots or have no parents in STATIC_MENU
