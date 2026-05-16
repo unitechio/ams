@@ -1,0 +1,5 @@
+-- 002_user_options.sql
+ALTER TABLE users ADD COLUMN password_expires_at TIMESTAMP NULL;
+ALTER TABLE users ADD COLUMN one_time_password BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN require_otp BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN two_factor_enabled BOOLEAN DEFAULT FALSE;

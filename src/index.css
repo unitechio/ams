@@ -1,0 +1,139 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+@variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --primary: #059669;
+    --primary-hover: #047857;
+    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-display: 'Outfit', system-ui, -apple-system, sans-serif;
+
+    /* shadcn-compatible tokens (Light) */
+    --background: 210 40% 98%; /* slate-50/100 area */
+    --foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --primary-fg: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 159 89% 31%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --primary-fg: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --ring: 159 89% 31%;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.011em;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-display, .font-outfit {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  #root {
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+  }
+
+  /* ─── Custom scrollbar ─────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 99px; }
+  ::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+
+  /* ─── Override global transition – only for color/opacity props, NOT layout  ─
+     This prevents the global 150ms on width/height causing layout jank.         */
+  * {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+
+  /* Elements that need transform transitions */
+  button, a, [role="button"] {
+    transition-property: color, background-color, border-color, opacity, box-shadow, transform;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+
+  /* Fix for popups/dialogs content spacing */
+  [data-radix-portal] {
+    z-index: 9999 !important;
+  }
+}
+
+@layer components {
+  /* ─── Page fade-in animation ─────────────────────────────────────────────── */
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .page-enter {
+    animation: page-in 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+  }
+
+  /* Sidebar collapse transition (width only, not affected by global override) */
+  .sidebar-transition {
+    transition: width 250ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  }
+
+  /* ─── Accordion-style menu expand ────────────────────────────────────────── */
+  @keyframes accordion-down {
+    from { opacity: 0; max-height: 0; }
+    to   { opacity: 1; max-height: var(--accordion-max-h, 500px); }
+  }
+  @keyframes accordion-up {
+    from { opacity: 1; max-height: var(--accordion-max-h, 500px); }
+    to   { opacity: 0; max-height: 0; }
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .glass { @apply bg-white/70 backdrop-blur-md border border-white/20; }
+}
