@@ -265,6 +265,7 @@ export default function AuditLogPage() {
                   value={filters.from}
                   onChange={(v) => setFilters((f) => ({ ...f, from: v || "" }))}
                   className="h-9 rounded-lg bg-slate-50/50"
+                  includeTime
                 />
               </div>
               <div className="space-y-1.5">
@@ -275,6 +276,7 @@ export default function AuditLogPage() {
                   value={filters.to}
                   onChange={(v) => setFilters((f) => ({ ...f, to: v || "" }))}
                   className="h-9 rounded-lg bg-slate-50/50"
+                  includeTime
                 />
               </div>
             </div>
