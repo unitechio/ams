@@ -1387,6 +1387,15 @@ func (uc *ClientUsecase) List(filters map[string]interface{}, page, pageSize int
 	return paginate(data, total, page, pageSize), nil
 }
 
+func (uc *ClientUsecase) GetByID(id uint) (*ClientResponse, error) {
+	client, err := uc.findByID(id)
+	if err != nil {
+		return nil, err
+	}
+	resp := clientToResponse(client)
+	return &resp, nil
+}
+
 func (uc *ClientUsecase) Create(req *CreateClientReq) (*ClientResponse, error) {
 	client := &domain.AuthClient{
 		ClientID:            strings.TrimSpace(req.ClientID),
@@ -1814,6 +1823,15 @@ func (uc *SecurityPolicyUsecase) List(filters map[string]interface{}, page, page
 		data[i] = securityPolicyToResponse(item)
 	}
 	return paginate(data, total, page, pageSize), nil
+}
+
+func (uc *SecurityPolicyUsecase) GetByID(id uint) (*SecurityPolicyResponse, error) {
+	item, err := uc.findByID(id)
+	if err != nil {
+		return nil, err
+	}
+	resp := securityPolicyToResponse(item)
+	return &resp, nil
 }
 
 func (uc *SecurityPolicyUsecase) Create(req *CreateSecurityPolicyReq) (*SecurityPolicyResponse, error) {

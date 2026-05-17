@@ -380,6 +380,67 @@ export interface ReferenceOption {
   created_at: string;
 }
 
+const FALLBACK_REFERENCE_OPTIONS: Omit<ReferenceOption, 'id' | 'created_at'>[] = [
+  { option_group: 'client_template', value: 'spa_web', label: 'SPA Web', description: 'Public SPA dùng authorization_code + PKCE', meta_json: '{"app_type":"web_app","public":true,"channels":["web"],"grants":["authorization_code","refresh_token"],"trusted_types":["browser"],"pkce_required":true,"audiences":["web-api"],"tags":["portal","spa"]}', sort_order: 10, active: true },
+  { option_group: 'client_template', value: 'crm_portal', label: 'CRM Portal', description: 'Confidential client cho backoffice CRM', meta_json: '{"app_type":"admin_portal","public":false,"channels":["crm","web"],"grants":["authorization_code","refresh_token"],"trusted_types":["browser","desktop"],"pkce_required":false,"audiences":["crm-api"],"tags":["crm","backoffice"]}', sort_order: 20, active: true },
+  { option_group: 'client_template', value: 'mobile_pkce', label: 'Mobile PKCE', description: 'Public mobile app dùng PKCE', meta_json: '{"app_type":"mobile_app","public":true,"channels":["mobile"],"grants":["authorization_code","refresh_token"],"trusted_types":["mobile"],"pkce_required":true,"audiences":["mobile-api"],"tags":["mobile","public"]}', sort_order: 30, active: true },
+  { option_group: 'client_template', value: 'service_m2m', label: 'Internal Service', description: 'Service account dùng client_credentials', meta_json: '{"app_type":"internal_service","public":false,"channels":["service"],"grants":["client_credentials"],"trusted_types":["server"],"pkce_required":false,"audiences":["internal-api"],"tags":["service","internal"]}', sort_order: 40, active: true },
+  { option_group: 'client_template', value: 'custom', label: 'Custom', description: 'Template tự do', meta_json: '{"app_type":"web_app","public":true,"channels":["web"],"grants":["authorization_code","refresh_token"],"trusted_types":["browser"],"pkce_required":true,"audiences":["default-api"],"tags":["custom"]}', sort_order: 50, active: true },
+  { option_group: 'client_environment', value: 'dev', label: 'Development', description: '', meta_json: '{}', sort_order: 10, active: true },
+  { option_group: 'client_environment', value: 'stg', label: 'Staging', description: '', meta_json: '{}', sort_order: 20, active: true },
+  { option_group: 'client_environment', value: 'prod', label: 'Production', description: '', meta_json: '{}', sort_order: 30, active: true },
+  { option_group: 'client_app_type', value: 'web_app', label: 'Web App', description: '', meta_json: '{}', sort_order: 10, active: true },
+  { option_group: 'client_app_type', value: 'mobile_app', label: 'Mobile App', description: '', meta_json: '{}', sort_order: 20, active: true },
+  { option_group: 'client_app_type', value: 'admin_portal', label: 'Admin Portal', description: '', meta_json: '{}', sort_order: 30, active: true },
+  { option_group: 'client_app_type', value: 'kiosk', label: 'Kiosk', description: '', meta_json: '{}', sort_order: 40, active: true },
+  { option_group: 'client_app_type', value: 'internal_service', label: 'Internal Service', description: '', meta_json: '{}', sort_order: 50, active: true },
+  { option_group: 'client_app_type', value: 'partner_api', label: 'Partner API', description: '', meta_json: '{}', sort_order: 60, active: true },
+  { option_group: 'client_approval_status', value: 'approved', label: 'Approved', description: '', meta_json: '{}', sort_order: 10, active: true },
+  { option_group: 'client_approval_status', value: 'pending', label: 'Pending Approval', description: '', meta_json: '{}', sort_order: 20, active: true },
+  { option_group: 'client_approval_status', value: 'rejected', label: 'Rejected', description: '', meta_json: '{}', sort_order: 30, active: true },
+  { option_group: 'policy_type', value: 'auth', label: 'Auth', description: '', meta_json: '{}', sort_order: 10, active: true },
+  { option_group: 'policy_type', value: 'password', label: 'Password', description: '', meta_json: '{}', sort_order: 20, active: true },
+  { option_group: 'policy_type', value: 'step_up', label: 'Step-up Action', description: '', meta_json: '{}', sort_order: 30, active: true },
+  { option_group: 'policy_scope_type', value: 'global', label: 'Global', description: '', meta_json: '{}', sort_order: 10, active: true },
+  { option_group: 'policy_scope_type', value: 'client', label: 'Client', description: '', meta_json: '{}', sort_order: 20, active: true },
+  { option_group: 'policy_scope_type', value: 'channel', label: 'Channel', description: '', meta_json: '{}', sort_order: 30, active: true },
+  { option_group: 'policy_scope_type', value: 'client_channel', label: 'Client + Channel', description: '', meta_json: '{}', sort_order: 40, active: true },
+  { option_group: 'step_up_action', value: 'client.rotate_secret', label: 'client.rotate_secret', description: '', meta_json: '{}', sort_order: 10, active: true },
+  { option_group: 'step_up_action', value: 'policy.update', label: 'policy.update', description: '', meta_json: '{}', sort_order: 20, active: true },
+  { option_group: 'step_up_action', value: 'device.revoke', label: 'device.revoke', description: '', meta_json: '{}', sort_order: 30, active: true },
+  { option_group: 'step_up_action', value: 'user.reset_password', label: 'user.reset_password', description: '', meta_json: '{}', sort_order: 40, active: true },
+  { option_group: 'step_up_action', value: 'session.revoke', label: 'session.revoke', description: '', meta_json: '{}', sort_order: 50, active: true },
+  { option_group: 'step_up_action', value: '2fa.disable', label: '2fa.disable', description: '', meta_json: '{}', sort_order: 60, active: true },
+  { option_group: 'step_up_action', value: 'role.assign_permissions', label: 'role.assign_permissions', description: '', meta_json: '{}', sort_order: 70, active: true },
+  { option_group: 'step_up_action', value: 'client.delete', label: 'client.delete', description: '', meta_json: '{}', sort_order: 80, active: true },
+  { option_group: 'step_up_action', value: 'policy.delete', label: 'policy.delete', description: '', meta_json: '{}', sort_order: 90, active: true },
+  { option_group: 'channel_risk_level', value: 'low', label: 'Low', description: '', meta_json: '{}', sort_order: 10, active: true },
+  { option_group: 'channel_risk_level', value: 'medium', label: 'Medium', description: '', meta_json: '{}', sort_order: 20, active: true },
+  { option_group: 'channel_risk_level', value: 'high', label: 'High', description: '', meta_json: '{}', sort_order: 30, active: true },
+];
+
+function fallbackReferenceOptions(params?: { option_group?: string; active?: string; page?: number; page_size?: number }): PaginatedResponse<ReferenceOption> {
+  const page = params?.page || 1;
+  const pageSize = params?.page_size || 100;
+  let items = FALLBACK_REFERENCE_OPTIONS.map((item, index) => ({
+    ...item,
+    id: index + 1,
+    created_at: new Date(0).toISOString(),
+  }));
+  if (params?.option_group) items = items.filter(item => item.option_group === params.option_group);
+  if (params?.active) items = items.filter(item => item.active === (params.active === 'true'));
+  const total = items.length;
+  const start = (page - 1) * pageSize;
+  const data = items.slice(start, start + pageSize);
+  return {
+    data,
+    total,
+    page,
+    page_size: pageSize,
+    total_pages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
+
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -492,6 +553,7 @@ export const clientsApi = {
     if (params?.page_size) q.set('page_size', String(params.page_size));
     return get<PaginatedResponse<AuthClient>>(`/auth-clients?${q}`);
   },
+  get: (id: number) => get<AuthClient>(`/auth-clients/${id}`),
   create: (data: AuthClientPayload) => post<AuthClient>('/auth-clients', data),
   update: (id: number, data: AuthClientPayload) => put<AuthClient>(`/auth-clients/${id}`, data),
   rotateSecret: (id: number) => post<AuthClient>(`/auth-clients/${id}/rotate-secret`, {}),
@@ -513,6 +575,7 @@ export const serviceAccountsApi = {
     if (params?.page_size) q.set('page_size', String(params.page_size));
     return get<PaginatedResponse<AuthClient>>(`/service-accounts?${q}`);
   },
+  get: (id: number) => get<AuthClient>(`/service-accounts/${id}`),
   create: (data: AuthClientPayload) => post<AuthClient>('/service-accounts', data),
   update: (id: number, data: AuthClientPayload) => put<AuthClient>(`/service-accounts/${id}`, data),
   rotateSecret: (id: number) => post<AuthClient>(`/service-accounts/${id}/rotate-secret`, {}),
@@ -560,20 +623,39 @@ export const securityPoliciesApi = {
     if (params?.page_size) q.set('page_size', String(params.page_size));
     return get<PaginatedResponse<SecurityPolicy>>(`/security-policies?${q}`);
   },
+  get: (id: number) => get<SecurityPolicy>(`/security-policies/${id}`),
   create: (data: Omit<SecurityPolicy, 'id' | 'created_at' | 'config_json'>) => post<SecurityPolicy>('/security-policies', data),
   update: (id: number, data: Omit<SecurityPolicy, 'id' | 'created_at' | 'config_json'>) => put<SecurityPolicy>(`/security-policies/${id}`, data),
   delete: (id: number) => del<void>(`/security-policies/${id}`),
 };
 
 export const referenceOptionsApi = {
-  list: (params?: { search?: string; option_group?: string; active?: string; page?: number; page_size?: number }) => {
+  list: async (params?: { search?: string; option_group?: string; active?: string; page?: number; page_size?: number }) => {
     const q = new URLSearchParams();
     if (params?.search) q.set('search', params.search);
     if (params?.option_group) q.set('option_group', params.option_group);
     if (params?.active) q.set('active', params.active);
     if (params?.page) q.set('page', String(params.page));
     if (params?.page_size) q.set('page_size', String(params.page_size));
-    return get<PaginatedResponse<ReferenceOption>>(`/reference-options?${q}`);
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (_accessToken) headers['Authorization'] = `Bearer ${_accessToken}`;
+      const stepUpToken = getStepUpToken();
+      if (stepUpToken) headers['X-Step-Up-Token'] = stepUpToken;
+      const res = await fetch(`${BASE_URL}/reference-options?${q}`, { method: 'GET', headers });
+      if (res.status === 404) {
+        return fallbackReferenceOptions(params);
+      }
+      if (res.status === 401) {
+        const refreshed = await tryRefresh();
+        if (refreshed) return referenceOptionsApi.list(params);
+      }
+      const json = await res.json().catch(() => ({ success: false, error: 'Lỗi phân tích dữ liệu' }));
+      if (!res.ok || !json.success) throw new Error(json.error || 'Lỗi không xác định');
+      return json.data as PaginatedResponse<ReferenceOption>;
+    } catch (err) {
+      throw err;
+    }
   },
   create: (data: Omit<ReferenceOption, 'id' | 'created_at'>) => post<ReferenceOption>('/reference-options', data),
   update: (id: number, data: Omit<ReferenceOption, 'id' | 'created_at'>) => put<ReferenceOption>(`/reference-options/${id}`, data),

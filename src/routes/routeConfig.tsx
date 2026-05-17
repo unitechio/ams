@@ -24,10 +24,16 @@ const AuthHistoryPage = lazy(() => import("@/pages/AuthHistoryPage"));
 const AuditLogPage = lazy(() => import("@/pages/AuditLogPage"));
 const DevicesPage = lazy(() => import("@/pages/DevicesPage"));
 const AuthClientsPage = lazy(() => import("@/pages/AuthClientsPage"));
+const CreateAuthClientPage = lazy(() => import("@/pages/CreateAuthClientPage"));
+const EditAuthClientPage = lazy(() => import("@/pages/EditAuthClientPage"));
 const ServiceAccountsPage = lazy(() => import("@/pages/ServiceAccountsPage"));
+const CreateServiceAccountPage = lazy(() => import("@/pages/CreateServiceAccountPage"));
+const EditServiceAccountPage = lazy(() => import("@/pages/EditServiceAccountPage"));
 const SSOProvidersPage = lazy(() => import("@/pages/SSOProvidersPage"));
 const LoginChannelsPage = lazy(() => import("@/pages/LoginChannelsPage"));
 const SecurityPoliciesPage = lazy(() => import("@/pages/SecurityPoliciesPage"));
+const CreateSecurityPolicyPage = lazy(() => import("@/pages/CreateSecurityPolicyPage"));
+const EditSecurityPolicyPage = lazy(() => import("@/pages/EditSecurityPolicyPage"));
 const ReferenceOptionsPage = lazy(() => import("@/pages/ReferenceOptionsPage"));
 const OAuthCallbackPage = lazy(() => import("@/pages/OAuthCallbackPage"));
 const SSOCallbackPage = lazy(() => import("@/pages/SSOCallbackPage"));
@@ -166,11 +172,32 @@ export const routes: RouteObject[] = [
       },
       {
         path: "auth-clients",
-        element: (
-          <ProtectedRoute permissions={[PERMISSIONS.CLIENT_READ]}>
-            {Loadable(AuthClientsPage)({})}
-          </ProtectedRoute>
-        ),
+        children: [
+          {
+            index: true,
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.CLIENT_READ]}>
+                {Loadable(AuthClientsPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "create",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.CLIENT_CREATE]}>
+                {Loadable(CreateAuthClientPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: ":id/edit",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.CLIENT_UPDATE]}>
+                {Loadable(EditAuthClientPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+        ],
       },
       {
         path: "sso-providers",
@@ -190,11 +217,32 @@ export const routes: RouteObject[] = [
       },
       {
         path: "security-policies",
-        element: (
-          <ProtectedRoute permissions={[PERMISSIONS.POLICY_READ]}>
-            {Loadable(SecurityPoliciesPage)({})}
-          </ProtectedRoute>
-        ),
+        children: [
+          {
+            index: true,
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.POLICY_READ]}>
+                {Loadable(SecurityPoliciesPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "create",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.POLICY_CREATE]}>
+                {Loadable(CreateSecurityPolicyPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: ":id/edit",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.POLICY_UPDATE]}>
+                {Loadable(EditSecurityPolicyPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+        ],
       },
       {
         path: "reference-options",
@@ -206,11 +254,32 @@ export const routes: RouteObject[] = [
       },
       {
         path: "service-accounts",
-        element: (
-          <ProtectedRoute permissions={[PERMISSIONS.SERVICE_READ]}>
-            {Loadable(ServiceAccountsPage)({})}
-          </ProtectedRoute>
-        ),
+        children: [
+          {
+            index: true,
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.SERVICE_READ]}>
+                {Loadable(ServiceAccountsPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "create",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.SERVICE_CREATE]}>
+                {Loadable(CreateServiceAccountPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: ":id/edit",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.SERVICE_UPDATE]}>
+                {Loadable(EditServiceAccountPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+        ],
       },
     ],
   },

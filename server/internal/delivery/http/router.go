@@ -197,6 +197,7 @@ func Setup(
 		clients.Use(middleware.RequirePermission(permission.PermissionClientRead))
 		{
 			clients.GET("", clientH.List)
+			clients.GET("/:id", clientH.Get)
 			clients.POST("",
 				middleware.RequirePermission(permission.PermissionClientCreate),
 				middleware.RequireStepUp(jwtSvc),
@@ -223,6 +224,7 @@ func Setup(
 		serviceAccounts.Use(middleware.RequirePermission(permission.PermissionServiceRead))
 		{
 			serviceAccounts.GET("", clientH.List)
+			serviceAccounts.GET("/:id", clientH.Get)
 			serviceAccounts.POST("",
 				middleware.RequirePermission(permission.PermissionServiceCreate),
 				middleware.RequireStepUp(jwtSvc),
@@ -291,6 +293,7 @@ func Setup(
 		securityPolicies.Use(middleware.RequirePermission(permission.PermissionPolicyRead))
 		{
 			securityPolicies.GET("", securityPolicyH.List)
+			securityPolicies.GET("/:id", securityPolicyH.Get)
 			securityPolicies.POST("",
 				middleware.RequirePermission(permission.PermissionPolicyCreate),
 				middleware.RequireStepUp(jwtSvc),
