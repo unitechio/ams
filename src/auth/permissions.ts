@@ -72,6 +72,11 @@ export const PERMISSIONS = {
   POLICY_UPDATE: 'policy.update' as const,
   POLICY_DELETE: 'policy.delete' as const,
 
+  OPTION_READ: 'option.read' as const,
+  OPTION_CREATE: 'option.create' as const,
+  OPTION_UPDATE: 'option.update' as const,
+  OPTION_DELETE: 'option.delete' as const,
+
   // ── Wildcard (Super Admin bypass)
   WILDCARD: '*' as const,
 } as const;
@@ -144,6 +149,10 @@ export const PERMISSION_GROUPS: { name: string; label: string; permissions: Perm
     name: 'policy', label: 'Security Policy',
     permissions: [PERMISSIONS.POLICY_READ, PERMISSIONS.POLICY_CREATE, PERMISSIONS.POLICY_UPDATE, PERMISSIONS.POLICY_DELETE],
   },
+  {
+    name: 'option', label: 'Reference Option',
+    permissions: [PERMISSIONS.OPTION_READ, PERMISSIONS.OPTION_CREATE, PERMISSIONS.OPTION_UPDATE, PERMISSIONS.OPTION_DELETE],
+  },
 ];
 
 // Permission display names
@@ -191,5 +200,9 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'policy.create':      'Tạo security policy',
   'policy.update':      'Sửa security policy',
   'policy.delete':      'Xóa security policy',
+  'option.read':        'Xem reference option',
+  'option.create':      'Tạo reference option',
+  'option.update':      'Sửa reference option',
+  'option.delete':      'Xóa reference option',
   '*':                  'Toàn quyền (Super Admin)',
 };

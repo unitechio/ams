@@ -219,6 +219,21 @@ type GormSecurityPolicy struct {
 
 func (GormSecurityPolicy) TableName() string { return "sys_security_policies" }
 
+type GormReferenceOption struct {
+	ID          uint   `gorm:"primaryKey;autoIncrement"`
+	OptionGroup string `gorm:"size:100;not null;index:idx_sys_reference_options_group_value,unique"`
+	Value       string `gorm:"size:150;not null;index:idx_sys_reference_options_group_value,unique"`
+	Label       string `gorm:"size:200;not null"`
+	Description string `gorm:"size:600;default:''"`
+	MetaJSON    string `gorm:"type:text;default:'{}'"`
+	SortOrder   int    `gorm:"default:100"`
+	Active      bool   `gorm:"default:true"`
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+func (GormReferenceOption) TableName() string { return "sys_reference_options" }
+
 type GormAuditLog struct {
 	ID         uint   `gorm:"primaryKey;autoIncrement"`
 	UserID     uint   `gorm:"index"`

@@ -28,6 +28,7 @@ const ServiceAccountsPage = lazy(() => import("@/pages/ServiceAccountsPage"));
 const SSOProvidersPage = lazy(() => import("@/pages/SSOProvidersPage"));
 const LoginChannelsPage = lazy(() => import("@/pages/LoginChannelsPage"));
 const SecurityPoliciesPage = lazy(() => import("@/pages/SecurityPoliciesPage"));
+const ReferenceOptionsPage = lazy(() => import("@/pages/ReferenceOptionsPage"));
 const OAuthCallbackPage = lazy(() => import("@/pages/OAuthCallbackPage"));
 const SSOCallbackPage = lazy(() => import("@/pages/SSOCallbackPage"));
 
@@ -192,6 +193,14 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute permissions={[PERMISSIONS.POLICY_READ]}>
             {Loadable(SecurityPoliciesPage)({})}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "reference-options",
+        element: (
+          <ProtectedRoute permissions={[PERMISSIONS.OPTION_READ]}>
+            {Loadable(ReferenceOptionsPage)({})}
           </ProtectedRoute>
         ),
       },

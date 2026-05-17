@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Guard } from '@/guards/Guard';
 import { PERMISSIONS } from '@/auth/permissions';
-import { loginChannelsApi, type LoginChannel, type PaginatedResponse } from '@/lib/api';
+import { loginChannelsApi, referenceOptionsApi, type LoginChannel, type PaginatedResponse, type ReferenceOption } from '@/lib/api';
 import { toast } from 'sonner';
 
 const DEFAULT_FORM = {
@@ -28,6 +28,7 @@ const DEFAULT_FORM = {
 
 export default function LoginChannelsPage() {
   const [result, setResult] = useState<PaginatedResponse<LoginChannel> | null>(null);
+  const [referenceOptions, setReferenceOptions] = useState<ReferenceOption[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,14 @@ export default function LoginChannelsPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    referenceOptionsApi.list({ option_group: 'channel_risk_level', active: 'true', page: 1, page_size: 100 })
+      .then((res) => setReferenceOptions(res.data || []))
+      .catch((err) => toast.error(err instanceof Error ? err.message : 'Không thể tải risk-level options'));
+  }, []);
+
+  const riskLevelOptions = referenceOptions.filter(item => item.option_group === 'channel_risk_level');
 
   const openCreate = () => {
     setEditing(null);
@@ -128,9 +137,9 @@ export default function LoginChannelsPage() {
               <Select value={form.risk_level} onValueChange={(value) => setForm(f => ({ ...f, risk_level: value }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
+                  {riskLevelOptions.map(option => (
+                    <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -28,6 +28,7 @@ func Setup(
 	ssoProviderH *SSOProviderHandler,
 	loginChannelH *LoginChannelHandler,
 	securityPolicyH *SecurityPolicyHandler,
+	referenceOptionH *ReferenceOptionHandler,
 	roleH *RoleHandler,
 	permH *PermissionHandler,
 	menuH *MenuHandler,
@@ -85,14 +86,14 @@ func Setup(
 			authGrp.POST("/step-up", authH.StepUp)
 
 			// Session Management
-		authGrp.GET("/sessions", authH.Sessions)
-		authGrp.DELETE("/sessions/:id", middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "session.revoke", true), authH.RevokeSession)
-		authGrp.DELETE("/sessions", middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "session.revoke", true), authH.RevokeAllSessions)
+			authGrp.GET("/sessions", authH.Sessions)
+			authGrp.DELETE("/sessions/:id", middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "session.revoke", true), authH.RevokeSession)
+			authGrp.DELETE("/sessions", middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "session.revoke", true), authH.RevokeAllSessions)
 
 			// 2FA Management
-		authGrp.POST("/2fa/setup", authH.Setup2FA)
-		authGrp.POST("/2fa/verify", authH.Verify2FA)
-		authGrp.POST("/2fa/disable", middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "2fa.disable", true), authH.Disable2FA)
+			authGrp.POST("/2fa/setup", authH.Setup2FA)
+			authGrp.POST("/2fa/verify", authH.Verify2FA)
+			authGrp.POST("/2fa/disable", middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "2fa.disable", true), authH.Disable2FA)
 		}
 
 		// Permission-filtered menu for current user (used by sidebar)
@@ -304,6 +305,27 @@ func Setup(
 				middleware.RequirePermission(permission.PermissionPolicyDelete),
 				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "policy.delete", true),
 				securityPolicyH.Delete,
+			)
+		}
+
+		referenceOptions := auth.Group("/reference-options")
+		referenceOptions.Use(middleware.RequirePermission(permission.PermissionOptionRead))
+		{
+			referenceOptions.GET("", referenceOptionH.List)
+			referenceOptions.POST("",
+				middleware.RequirePermission(permission.PermissionOptionCreate),
+				middleware.RequireStepUp(jwtSvc),
+				referenceOptionH.Create,
+			)
+			referenceOptions.PUT("/:id",
+				middleware.RequirePermission(permission.PermissionOptionUpdate),
+				middleware.RequireStepUp(jwtSvc),
+				referenceOptionH.Update,
+			)
+			referenceOptions.DELETE("/:id",
+				middleware.RequirePermission(permission.PermissionOptionDelete),
+				middleware.RequireStepUp(jwtSvc),
+				referenceOptionH.Delete,
 			)
 		}
 

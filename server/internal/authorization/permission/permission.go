@@ -106,6 +106,12 @@ const (
 	PermissionPolicyCreate Permission = "policy.create"
 	PermissionPolicyUpdate Permission = "policy.update"
 	PermissionPolicyDelete Permission = "policy.delete"
+
+	// ── Reference Option Management
+	PermissionOptionRead   Permission = "option.read"
+	PermissionOptionCreate Permission = "option.create"
+	PermissionOptionUpdate Permission = "option.update"
+	PermissionOptionDelete Permission = "option.delete"
 )
 
 // ─── Permission Group Registry ────────────────────────────────────────────────
@@ -175,6 +181,11 @@ var Registry = []PermissionGroup{
 		Name:        "policy",
 		Description: "Quản lý auth/security policy theo global, client và channel",
 		Permissions: []Permission{PermissionPolicyRead, PermissionPolicyCreate, PermissionPolicyUpdate, PermissionPolicyDelete},
+	},
+	{
+		Name:        "option",
+		Description: "Quản lý reference option cho dropdown, template và catalog runtime",
+		Permissions: []Permission{PermissionOptionRead, PermissionOptionCreate, PermissionOptionUpdate, PermissionOptionDelete},
 	},
 }
 

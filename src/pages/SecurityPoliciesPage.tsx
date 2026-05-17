@@ -7,7 +7,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { clientsApi, loginChannelsApi, securityPoliciesApi, type AuthClient, type LoginChannel, type PaginatedResponse, type SecurityPolicy } from '@/lib/api';
+import { clientsApi, loginChannelsApi, referenceOptionsApi, securityPoliciesApi, type AuthClient, type LoginChannel, type PaginatedResponse, type ReferenceOption, type SecurityPolicy } from '@/lib/api';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Guard } from '@/guards/Guard';
 import { PERMISSIONS } from '@/auth/permissions';
@@ -51,6 +51,7 @@ export default function SecurityPoliciesPage() {
   const [result, setResult] = useState<PaginatedResponse<SecurityPolicy> | null>(null);
   const [clients, setClients] = useState<AuthClient[]>([]);
   const [channels, setChannels] = useState<LoginChannel[]>([]);
+  const [referenceOptions, setReferenceOptions] = useState<ReferenceOption[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -75,12 +76,14 @@ export default function SecurityPoliciesPage() {
 
   const fetchTargets = useCallback(async () => {
     try {
-      const [clientRes, channelRes] = await Promise.all([
+      const [clientRes, channelRes, optionRes] = await Promise.all([
         clientsApi.list({ page: 1, page_size: 200 }),
         loginChannelsApi.list({ page: 1, page_size: 100 }),
+        referenceOptionsApi.list({ page: 1, page_size: 500, active: 'true' }),
       ]);
       setClients(clientRes.data || []);
       setChannels(channelRes.data || []);
+      setReferenceOptions(optionRes.data || []);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Không thể tải client/channel cho policy');
     }
@@ -169,6 +172,9 @@ export default function SecurityPoliciesPage() {
   const rows = result?.data || [];
   const isAuthPolicy = form.policy_type === 'auth';
   const isStepUpPolicy = form.policy_type === 'step_up';
+  const policyTypeOptions = referenceOptions.filter(item => item.option_group === 'policy_type');
+  const scopeTypeOptions = referenceOptions.filter(item => item.option_group === 'policy_scope_type');
+  const stepUpActionOptions = referenceOptions.filter(item => item.option_group === 'step_up_action');
 
   return (
     <div className="space-y-6">
@@ -196,27 +202,26 @@ export default function SecurityPoliciesPage() {
             <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div>
               <Label>Policy Type</Label>
-              <Select value={form.policy_type} onValueChange={(value) => setForm(f => ({ ...f, policy_type: value }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auth">Auth</SelectItem>
-                  <SelectItem value="password">Password</SelectItem>
-                  <SelectItem value="step_up">Step-up Action</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                <Select value={form.policy_type} onValueChange={(value) => setForm(f => ({ ...f, policy_type: value }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {policyTypeOptions.map(option => (
+                      <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             <div>
               <Label>Scope Type</Label>
-              <Select value={form.scope_type} onValueChange={(value) => setForm(f => ({ ...f, scope_type: value, target_client: value === 'global' || value === 'channel' ? '' : f.target_client, target_channel: value === 'global' || value === 'client' ? '' : f.target_channel }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="global">Global</SelectItem>
-                  <SelectItem value="client">Client</SelectItem>
-                  <SelectItem value="channel">Channel</SelectItem>
-                  <SelectItem value="client_channel">Client + Channel</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                <Select value={form.scope_type} onValueChange={(value) => setForm(f => ({ ...f, scope_type: value, target_client: value === 'global' || value === 'channel' ? '' : f.target_client, target_channel: value === 'global' || value === 'client' ? '' : f.target_channel }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {scopeTypeOptions.map(option => (
+                      <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             <div className="md:col-span-2"><Label>Description</Label><Input value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} /></div>
             {isStepUpPolicy && (
               <div className="md:col-span-2">
@@ -224,10 +229,9 @@ export default function SecurityPoliciesPage() {
                 <Select value={form.target_action || undefined} onValueChange={(value) => setForm(f => ({ ...f, target_action: value }))}>
                   <SelectTrigger><SelectValue placeholder="Chọn action nhạy cảm" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="client.rotate_secret">client.rotate_secret</SelectItem>
-                    <SelectItem value="policy.update">policy.update</SelectItem>
-                    <SelectItem value="device.revoke">device.revoke</SelectItem>
-                    <SelectItem value="user.reset_password">user.reset_password</SelectItem>
+                    {stepUpActionOptions.map(option => (
+                      <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>

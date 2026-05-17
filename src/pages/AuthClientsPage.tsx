@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AppWindow, Copy, KeyRound, Loader2, Plus, RefreshCcw, RotateCw, Search, ShieldCheck, Trash2 } from 'lucide-react';
+import { AppWindow, Bot, Copy, KeyRound, Loader2, Plus, RefreshCcw, RotateCw, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { clientsApi, loginChannelsApi, serviceAccountsApi, type AuthClient, type LoginChannel, type PaginatedResponse } from '@/lib/api';
+import { clientsApi, loginChannelsApi, referenceOptionsApi, serviceAccountsApi, type AuthClient, type LoginChannel, type PaginatedResponse, type ReferenceOption } from '@/lib/api';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Guard } from '@/guards/Guard';
 import { PERMISSIONS } from '@/auth/permissions';
@@ -19,15 +19,16 @@ type StepUpAction =
   | { type: 'rotate'; client: AuthClient }
   | null;
 
-const TEMPLATE_OPTIONS = [
-  { value: 'spa_web', label: 'SPA Web', appType: 'web_app', public: true, channels: ['web'], grants: 'authorization_code,refresh_token', trusted: 'browser', pkce: true, audience: 'web-api' },
-  { value: 'crm_portal', label: 'CRM Portal', appType: 'admin_portal', public: false, channels: ['crm', 'web'], grants: 'authorization_code,refresh_token', trusted: 'browser,desktop', pkce: false, audience: 'crm-api' },
-  { value: 'mobile_pkce', label: 'Mobile PKCE', appType: 'mobile_app', public: true, channels: ['mobile'], grants: 'authorization_code,refresh_token', trusted: 'mobile', pkce: true, audience: 'mobile-api' },
-  { value: 'kiosk_public', label: 'Kiosk', appType: 'kiosk', public: true, channels: ['kiosk'], grants: 'authorization_code,refresh_token', trusted: 'device,browser', pkce: true, audience: 'kiosk-api' },
-  { value: 'service_m2m', label: 'Internal Service', appType: 'internal_service', public: false, channels: ['service'], grants: 'client_credentials', trusted: 'server', pkce: false, audience: 'internal-api' },
-  { value: 'partner_oidc', label: 'Partner Portal', appType: 'partner_api', public: false, channels: ['partner'], grants: 'authorization_code,refresh_token', trusted: 'browser,server', pkce: false, audience: 'partner-api' },
-  { value: 'custom', label: 'Custom', appType: 'web_app', public: true, channels: ['web'], grants: 'authorization_code,refresh_token', trusted: 'browser', pkce: true, audience: 'default-api' },
-] as const;
+type TemplateMeta = {
+  app_type?: string;
+  public?: boolean;
+  channels?: string[];
+  grants?: string[];
+  trusted_types?: string[];
+  pkce_required?: boolean;
+  audiences?: string[];
+  tags?: string[];
+};
 
 const DEFAULT_FORM = {
   client_id: '',
@@ -56,27 +57,37 @@ function split(value: string) {
   return value.split(',').map(v => v.trim()).filter(Boolean);
 }
 
-function toPayload(form: typeof DEFAULT_FORM) {
+function parseTemplateMeta(option?: ReferenceOption): TemplateMeta {
+  if (!option?.meta_json) return {};
+  try {
+    return JSON.parse(option.meta_json) as TemplateMeta;
+  } catch {
+    return {};
+  }
+}
+
+function toPayload(form: typeof DEFAULT_FORM, mode: Mode) {
+  const isService = mode === 'service';
   return {
     client_id: form.client_id.trim(),
     client_secret: form.client_secret.trim(),
     name: form.name.trim(),
     description: form.description.trim(),
-    app_type: form.app_type,
+    app_type: isService ? 'internal_service' : form.app_type,
     client_template: form.client_template,
     environment: form.environment,
     domain_group: form.domain_group.trim(),
     owner_team: form.owner_team.trim(),
-    public: form.public,
-    pkce_required: form.pkce_required,
+    public: isService ? false : form.public,
+    pkce_required: isService ? false : form.pkce_required,
     active: form.active,
-    legacy_password_grant: form.legacy_password_grant,
+    legacy_password_grant: isService ? false : form.legacy_password_grant,
     approval_status: form.approval_status,
-    grant_types: split(form.grant_types),
-    redirect_uris: split(form.redirect_uris),
+    grant_types: isService ? ['client_credentials'] : split(form.grant_types),
+    redirect_uris: isService ? [] : split(form.redirect_uris),
     audiences: split(form.audiences),
-    channels: form.channels,
-    trusted_types: split(form.trusted_types),
+    channels: isService ? ['service'] : form.channels,
+    trusted_types: isService ? ['server'] : split(form.trusted_types),
     tags: split(form.tags),
   };
 }
@@ -93,6 +104,7 @@ function secretStatus(client: AuthClient) {
 export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
   const [result, setResult] = useState<PaginatedResponse<AuthClient> | null>(null);
   const [channels, setChannels] = useState<LoginChannel[]>([]);
+  const [referenceOptions, setReferenceOptions] = useState<ReferenceOption[]>([]);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -103,14 +115,33 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [saving, setSaving] = useState(false);
 
-  const appType = mode === 'service' ? 'internal_service' : undefined;
-  const clientApi = mode === 'service' ? serviceAccountsApi : clientsApi;
+  const isServiceMode = mode === 'service';
+  const appType = isServiceMode ? 'internal_service' : undefined;
+  const clientApi = isServiceMode ? serviceAccountsApi : clientsApi;
   const channelOptions = useMemo(() => channels.filter(item => item.active), [channels]);
+  const optionsByGroup = useMemo(() => {
+    return referenceOptions.reduce<Record<string, ReferenceOption[]>>((acc, item) => {
+      if (!acc[item.option_group]) acc[item.option_group] = [];
+      acc[item.option_group].push(item);
+      return acc;
+    }, {});
+  }, [referenceOptions]);
+
+  const templateOptions = useMemo(() => {
+    const items = optionsByGroup.client_template || [];
+    return items.filter((item) => isServiceMode
+      ? parseTemplateMeta(item).app_type === 'internal_service'
+      : parseTemplateMeta(item).app_type !== 'internal_service');
+  }, [optionsByGroup, isServiceMode]);
+
+  const environmentOptions = optionsByGroup.client_environment || [];
+  const appTypeOptions = optionsByGroup.client_app_type || [];
+  const approvalOptions = optionsByGroup.client_approval_status || [];
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const data = mode === 'service'
+      const data = isServiceMode
         ? await serviceAccountsApi.list({ search, page, page_size: 20 })
         : await clientsApi.list({ search, app_type: appType, page, page_size: 20 });
       setResult(data);
@@ -119,14 +150,18 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
     } finally {
       setLoading(false);
     }
-  }, [search, appType, page, mode]);
+  }, [search, appType, page, isServiceMode]);
 
-  const fetchChannels = useCallback(async () => {
+  const fetchMetadata = useCallback(async () => {
     try {
-      const data = await loginChannelsApi.list({ page: 1, page_size: 100 });
-      setChannels(data.data || []);
+      const [channelRes, optionRes] = await Promise.all([
+        loginChannelsApi.list({ page: 1, page_size: 100 }),
+        referenceOptionsApi.list({ page: 1, page_size: 500, active: 'true' }),
+      ]);
+      setChannels(channelRes.data || []);
+      setReferenceOptions(optionRes.data || []);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Không thể tải login channels');
+      toast.error(err instanceof Error ? err.message : 'Không thể tải option metadata');
     }
   }, []);
 
@@ -135,44 +170,46 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
   }, [fetchData]);
 
   useEffect(() => {
-    fetchChannels();
-  }, [fetchChannels]);
+    fetchMetadata();
+  }, [fetchMetadata]);
 
-  const applyTemplate = (templateValue: string) => {
-    const tpl = TEMPLATE_OPTIONS.find(item => item.value === templateValue) || TEMPLATE_OPTIONS[0];
+  const applyTemplate = useCallback((templateValue: string) => {
+    const selected = templateOptions.find(item => item.value === templateValue) || templateOptions[0];
+    const meta = parseTemplateMeta(selected);
     setForm(prev => ({
       ...prev,
-      client_template: tpl.value,
-      app_type: tpl.appType,
-      public: tpl.public,
-      pkce_required: tpl.pkce,
-      grant_types: tpl.grants,
-      audiences: tpl.audience,
-      channels: [...tpl.channels],
-      trusted_types: tpl.trusted,
-      tags: prev.tags || tpl.label.toLowerCase().replace(/\s+/g, ','),
+      client_template: selected?.value || prev.client_template,
+      app_type: meta.app_type || prev.app_type,
+      public: isServiceMode ? false : meta.public ?? prev.public,
+      pkce_required: isServiceMode ? false : meta.pkce_required ?? prev.pkce_required,
+      grant_types: (meta.grants || split(prev.grant_types)).join(','),
+      audiences: (meta.audiences || split(prev.audiences)).join(','),
+      channels: isServiceMode ? ['service'] : (meta.channels || prev.channels),
+      trusted_types: (meta.trusted_types || split(prev.trusted_types)).join(','),
+      tags: (meta.tags || split(prev.tags)).join(','),
       legacy_password_grant: false,
-      client_secret: tpl.public ? '' : prev.client_secret,
+      client_secret: (isServiceMode || meta.public === false) ? prev.client_secret : '',
     }));
-  };
+  }, [templateOptions, isServiceMode]);
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditing(null);
-    const template = mode === 'service' ? 'service_m2m' : 'spa_web';
+    const preferredTemplate = templateOptions[0]?.value || (isServiceMode ? 'service_m2m' : 'spa_web');
     setForm({
       ...DEFAULT_FORM,
-      client_template: template,
-      app_type: template === 'service_m2m' ? 'internal_service' : 'web_app',
-      public: template !== 'service_m2m',
-      pkce_required: template !== 'service_m2m',
-      grant_types: template === 'service_m2m' ? 'client_credentials' : 'authorization_code,refresh_token',
-      audiences: template === 'service_m2m' ? 'internal-api' : 'web-api',
-      channels: template === 'service_m2m' ? ['service'] : ['web'],
-      trusted_types: template === 'service_m2m' ? 'server' : 'browser',
-      tags: template === 'service_m2m' ? 'service,internal' : 'portal,spa',
+      client_template: preferredTemplate,
+      app_type: isServiceMode ? 'internal_service' : 'web_app',
+      public: !isServiceMode,
+      pkce_required: !isServiceMode,
+      grant_types: isServiceMode ? 'client_credentials' : 'authorization_code,refresh_token',
+      audiences: isServiceMode ? 'internal-api' : 'web-api',
+      channels: isServiceMode ? ['service'] : ['web'],
+      trusted_types: isServiceMode ? 'server' : 'browser',
+      tags: isServiceMode ? 'service,internal' : 'portal,spa',
     });
     setDialogOpen(true);
-  };
+    setTimeout(() => applyTemplate(preferredTemplate), 0);
+  }, [applyTemplate, isServiceMode, templateOptions]);
 
   const openEdit = (client: AuthClient) => {
     setEditing(client);
@@ -204,13 +241,13 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = toPayload(form);
+      const payload = toPayload(form, mode);
       if (editing) {
         await clientApi.update(editing.id, payload);
-        toast.success('Cập nhật auth client thành công');
+        toast.success(isServiceMode ? 'Cập nhật service account thành công' : 'Cập nhật auth client thành công');
       } else {
         await clientApi.create(payload);
-        toast.success('Tạo auth client thành công');
+        toast.success(isServiceMode ? 'Tạo service account thành công' : 'Tạo auth client thành công');
       }
       setDialogOpen(false);
       fetchData();
@@ -257,9 +294,11 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-5xl">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Cập nhật auth client' : 'Tạo auth client mới'}</DialogTitle>
+            <DialogTitle>{editing ? (isServiceMode ? 'Cập nhật service account' : 'Cập nhật auth client') : (isServiceMode ? 'Tạo service account mới' : 'Tạo auth client mới')}</DialogTitle>
             <DialogDescription>
-              Quản lý `client_id`, public/confidential boundary, redirect URI, audience, channel mapping, approval status và secret lifecycle.
+              {isServiceMode
+                ? 'Service account dùng cho machine-to-machine, luôn confidential, grant mặc định là client_credentials và không dùng redirect URI.'
+                : 'Quản lý client_id, boundary public/confidential, redirect URI, audience, channel mapping, approval status và secret lifecycle.'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -268,8 +307,8 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
               <Select value={form.client_template} onValueChange={applyTemplate}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TEMPLATE_OPTIONS.map(option => (
-                    <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  {templateOptions.map(option => (
+                    <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -279,9 +318,9 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
               <Select value={form.environment} onValueChange={(value) => setForm(f => ({ ...f, environment: value }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="dev">Dev</SelectItem>
-                  <SelectItem value="stg">Staging</SelectItem>
-                  <SelectItem value="prod">Production</SelectItem>
+                  {environmentOptions.map(option => (
+                    <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -289,64 +328,75 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
             <div><Label>Tên hiển thị</Label><Input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div><Label>Owner Team</Label><Input value={form.owner_team} onChange={(e) => setForm(f => ({ ...f, owner_team: e.target.value }))} placeholder="identity-platform" /></div>
             <div><Label>Domain Group</Label><Input value={form.domain_group} onChange={(e) => setForm(f => ({ ...f, domain_group: e.target.value }))} placeholder="crm, payments, partner" /></div>
-            <div>
-              <Label>App Type</Label>
-              <Select value={form.app_type} onValueChange={(value) => setForm(f => ({ ...f, app_type: value }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="web_app">Web App</SelectItem>
-                  <SelectItem value="mobile_app">Mobile App</SelectItem>
-                  <SelectItem value="admin_portal">Admin Portal</SelectItem>
-                  <SelectItem value="kiosk">Kiosk</SelectItem>
-                  <SelectItem value="internal_service">Internal Service</SelectItem>
-                  <SelectItem value="partner_api">Partner API</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {isServiceMode ? (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                App Type cố định: <span className="font-semibold text-slate-800">internal_service</span>
+              </div>
+            ) : (
+              <div>
+                <Label>App Type</Label>
+                <Select value={form.app_type} onValueChange={(value) => setForm(f => ({ ...f, app_type: value }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {appTypeOptions.map(option => (
+                      <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div>
               <Label>Approval Status</Label>
               <Select value={form.approval_status} onValueChange={(value) => setForm(f => ({ ...f, approval_status: value }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="approved">Approved</SelectItem>
-                  <SelectItem value="pending">Pending approval</SelectItem>
-                  <SelectItem value="rejected">Rejected</SelectItem>
+                  {approvalOptions.map(option => (
+                    <SelectItem key={option.id} value={option.value}>{option.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="md:col-span-2"><Label>Mô tả</Label><Input value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-            <div><Label>Grant Types</Label><Input value={form.grant_types} onChange={(e) => setForm(f => ({ ...f, grant_types: e.target.value }))} placeholder="authorization_code,refresh_token" /></div>
+            <div><Label>Grant Types</Label><Input value={form.grant_types} disabled={isServiceMode} onChange={(e) => setForm(f => ({ ...f, grant_types: e.target.value }))} placeholder="authorization_code,refresh_token" /></div>
             <div><Label>Audiences</Label><Input value={form.audiences} onChange={(e) => setForm(f => ({ ...f, audiences: e.target.value }))} placeholder="payment-api,parking-api" /></div>
-            <div><Label>Redirect URIs</Label><Input value={form.redirect_uris} onChange={(e) => setForm(f => ({ ...f, redirect_uris: e.target.value }))} placeholder="https://app/callback,myapp://oauth/callback" /></div>
-            <div><Label>Trusted Types</Label><Input value={form.trusted_types} onChange={(e) => setForm(f => ({ ...f, trusted_types: e.target.value }))} placeholder="browser,mobile,server" /></div>
+            {!isServiceMode && <div><Label>Redirect URIs</Label><Input value={form.redirect_uris} onChange={(e) => setForm(f => ({ ...f, redirect_uris: e.target.value }))} placeholder="https://app/callback,myapp://oauth/callback" /></div>}
+            <div><Label>Trusted Types</Label><Input value={form.trusted_types} disabled={isServiceMode} onChange={(e) => setForm(f => ({ ...f, trusted_types: e.target.value }))} placeholder="browser,mobile,server" /></div>
             <div><Label>Tags</Label><Input value={form.tags} onChange={(e) => setForm(f => ({ ...f, tags: e.target.value }))} placeholder="crm,partner,prod" /></div>
-            <div><Label>Client Secret</Label><Input value={form.client_secret} disabled={form.public} onChange={(e) => setForm(f => ({ ...f, client_secret: e.target.value }))} placeholder={form.public ? 'Public client không dùng secret' : 'secret sẽ tự sinh nếu để trống'} /></div>
+            <div><Label>Client Secret</Label><Input value={form.client_secret} disabled={!isServiceMode && form.public} onChange={(e) => setForm(f => ({ ...f, client_secret: e.target.value }))} placeholder={(!isServiceMode && form.public) ? 'Public client không dùng secret' : 'Secret sẽ tự sinh nếu để trống'} /></div>
             <div className="space-y-2">
               <Label>Login Channels</Label>
-              <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
-                {channelOptions.map(channel => (
-                  <label key={channel.id} className="flex items-center gap-2 text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={form.channels.includes(channel.code)}
-                      onChange={() => toggleChannel(channel.code)}
-                    />
-                    <span>{channel.code}</span>
-                    <span className="text-xs text-slate-400">({channel.risk_level})</span>
-                  </label>
-                ))}
-              </div>
+              {isServiceMode ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">Channel cố định: <span className="font-semibold text-slate-800">service</span></div>
+              ) : (
+                <div className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm sm:grid-cols-2">
+                  {channelOptions.map(channel => (
+                    <label key={channel.id} className="flex items-center gap-2 text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={form.channels.includes(channel.code)}
+                        onChange={() => toggleChannel(channel.code)}
+                      />
+                      <span>{channel.code}</span>
+                      <span className="text-xs text-slate-400">({channel.risk_level})</span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="md:col-span-2 flex flex-wrap items-center gap-5 pt-2 text-sm">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={form.public} onChange={(e) => setForm(f => ({ ...f, public: e.target.checked, client_secret: e.target.checked ? '' : f.client_secret }))} /> Public client</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={form.pkce_required} onChange={(e) => setForm(f => ({ ...f, pkce_required: e.target.checked }))} /> PKCE required</label>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={form.legacy_password_grant} onChange={(e) => setForm(f => ({ ...f, legacy_password_grant: e.target.checked }))} /> Legacy password grant</label>
+              {!isServiceMode && (
+                <>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={form.public} onChange={(e) => setForm(f => ({ ...f, public: e.target.checked, client_secret: e.target.checked ? '' : f.client_secret }))} /> Public client</label>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={form.pkce_required} onChange={(e) => setForm(f => ({ ...f, pkce_required: e.target.checked }))} /> PKCE required</label>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={form.legacy_password_grant} onChange={(e) => setForm(f => ({ ...f, legacy_password_grant: e.target.checked }))} /> Legacy password grant</label>
+                </>
+              )}
               <label className="flex items-center gap-2"><input type="checkbox" checked={form.active} onChange={(e) => setForm(f => ({ ...f, active: e.target.checked }))} /> Active</label>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Hủy</Button>
-            <Button onClick={handleSave} disabled={saving || form.channels.length === 0}>
+            <Button onClick={handleSave} disabled={saving || (!isServiceMode && form.channels.length === 0)}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Lưu
             </Button>
@@ -355,14 +405,14 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
       </Dialog>
 
       <PageHeader
-        title={mode === 'service' ? 'Service Accounts' : 'OAuth Clients'}
-        subtitle={mode === 'service'
+        title={isServiceMode ? 'Service Accounts' : 'OAuth Clients'}
+        subtitle={isServiceMode
           ? 'Machine-to-machine clients cho cronjob, worker, integration và internal API'
           : 'Tách client khỏi login channel để quản lý approval, audience, redirect URI, template và secret lifecycle theo từng application'}
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => { fetchData(); fetchChannels(); }}><RefreshCcw className="mr-2 h-4 w-4" />Làm mới</Button>
-            <Guard permission={mode === 'service' ? PERMISSIONS.SERVICE_CREATE : PERMISSIONS.CLIENT_CREATE}>
+            <Button variant="outline" onClick={() => { fetchData(); fetchMetadata(); }}><RefreshCcw className="mr-2 h-4 w-4" />Làm mới</Button>
+            <Guard permission={isServiceMode ? PERMISSIONS.SERVICE_CREATE : PERMISSIONS.CLIENT_CREATE}>
               <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Thêm mới</Button>
             </Guard>
           </div>
@@ -402,7 +452,7 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
                       </td>
                       <td className="px-4 py-3 align-top text-xs text-slate-600">
                         <div className="flex items-center gap-2">
-                          {client.app_type === 'internal_service' ? <ShieldCheck className="h-4 w-4 text-emerald-500" /> : <AppWindow className="h-4 w-4 text-slate-400" />}
+                          {client.app_type === 'internal_service' ? <Bot className="h-4 w-4 text-emerald-500" /> : <AppWindow className="h-4 w-4 text-slate-400" />}
                           <span>{client.client_template || client.app_type}</span>
                         </div>
                         <div className="mt-1">{client.tags.join(', ') || 'no tags'}</div>

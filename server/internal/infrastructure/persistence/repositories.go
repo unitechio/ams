@@ -1094,6 +1094,85 @@ func (r *GormSecurityPolicyRepository) Delete(id uint) error {
 	return r.db.Delete(&GormSecurityPolicy{}, id).Error
 }
 
+type GormReferenceOptionRepository struct{ db *gorm.DB }
+
+func NewGormReferenceOptionRepository(db *gorm.DB) *GormReferenceOptionRepository {
+	return &GormReferenceOptionRepository{db}
+}
+
+func (r *GormReferenceOptionRepository) List(filters map[string]interface{}) ([]*domain.ReferenceOption, int64, error) {
+	q := r.db.Model(&GormReferenceOption{})
+	if search, ok := filters["search"].(string); ok && strings.TrimSpace(search) != "" {
+		like := "%" + strings.TrimSpace(search) + "%"
+		q = q.Where("option_group ILIKE ? OR value ILIKE ? OR label ILIKE ? OR description ILIKE ?", like, like, like, like)
+	}
+	if group, ok := filters["option_group"].(string); ok && strings.TrimSpace(group) != "" {
+		q = q.Where("option_group = ?", strings.TrimSpace(group))
+	}
+	if active, ok := filters["active"].(string); ok && strings.TrimSpace(active) != "" {
+		q = q.Where("active = ?", strings.EqualFold(active, "true"))
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	page, _ := filters["page"].(int)
+	pageSize, _ := filters["page_size"].(int)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var models []GormReferenceOption
+	if err := q.Order("option_group ASC, sort_order ASC, id ASC").Offset(offset).Limit(pageSize).Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+	result := make([]*domain.ReferenceOption, len(models))
+	for i, item := range models {
+		result[i] = &domain.ReferenceOption{
+			ID:          item.ID,
+			OptionGroup: item.OptionGroup,
+			Value:       item.Value,
+			Label:       item.Label,
+			Description: item.Description,
+			MetaJSON:    item.MetaJSON,
+			SortOrder:   item.SortOrder,
+			Active:      item.Active,
+			CreatedAt:   item.CreatedAt,
+			UpdatedAt:   item.UpdatedAt,
+		}
+	}
+	return result, total, nil
+}
+
+func (r *GormReferenceOptionRepository) Save(item *domain.ReferenceOption) error {
+	model := &GormReferenceOption{
+		ID:          item.ID,
+		OptionGroup: item.OptionGroup,
+		Value:       item.Value,
+		Label:       item.Label,
+		Description: item.Description,
+		MetaJSON:    item.MetaJSON,
+		SortOrder:   item.SortOrder,
+		Active:      item.Active,
+	}
+	var err error
+	if model.ID == 0 {
+		err = r.db.Create(model).Error
+	} else {
+		err = r.db.Save(model).Error
+	}
+	item.ID = model.ID
+	return err
+}
+
+func (r *GormReferenceOptionRepository) Delete(id uint) error {
+	return r.db.Delete(&GormReferenceOption{}, id).Error
+}
+
 func gormToSecurityPolicy(model *GormSecurityPolicy) *domain.SecurityPolicy {
 	return &domain.SecurityPolicy{
 		ID:            model.ID,

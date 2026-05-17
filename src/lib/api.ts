@@ -368,6 +368,18 @@ export interface SecurityPolicy {
   created_at: string;
 }
 
+export interface ReferenceOption {
+  id: number;
+  option_group: string;
+  value: string;
+  label: string;
+  description: string;
+  meta_json: string;
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+}
+
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -551,6 +563,21 @@ export const securityPoliciesApi = {
   create: (data: Omit<SecurityPolicy, 'id' | 'created_at' | 'config_json'>) => post<SecurityPolicy>('/security-policies', data),
   update: (id: number, data: Omit<SecurityPolicy, 'id' | 'created_at' | 'config_json'>) => put<SecurityPolicy>(`/security-policies/${id}`, data),
   delete: (id: number) => del<void>(`/security-policies/${id}`),
+};
+
+export const referenceOptionsApi = {
+  list: (params?: { search?: string; option_group?: string; active?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.option_group) q.set('option_group', params.option_group);
+    if (params?.active) q.set('active', params.active);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.page_size) q.set('page_size', String(params.page_size));
+    return get<PaginatedResponse<ReferenceOption>>(`/reference-options?${q}`);
+  },
+  create: (data: Omit<ReferenceOption, 'id' | 'created_at'>) => post<ReferenceOption>('/reference-options', data),
+  update: (id: number, data: Omit<ReferenceOption, 'id' | 'created_at'>) => put<ReferenceOption>(`/reference-options/${id}`, data),
+  delete: (id: number) => del<void>(`/reference-options/${id}`),
 };
 
 // ─── Users API ────────────────────────────────────────────────────────────────

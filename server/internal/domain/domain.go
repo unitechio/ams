@@ -123,6 +123,19 @@ type SecurityPolicy struct {
 	UpdatedAt     time.Time
 }
 
+type ReferenceOption struct {
+	ID          uint
+	OptionGroup string
+	Value       string
+	Label       string
+	Description string
+	MetaJSON    string
+	SortOrder   int
+	Active      bool
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
 // EffectivePermissions resolves all permissions from user's roles
 func (u *User) EffectivePermissions() *permission.PermissionSet {
 	var eps []permission.EffectivePermission
@@ -359,6 +372,12 @@ type LoginChannelRepository interface {
 type SecurityPolicyRepository interface {
 	List(filters map[string]interface{}) ([]*SecurityPolicy, int64, error)
 	Save(policy *SecurityPolicy) error
+	Delete(id uint) error
+}
+
+type ReferenceOptionRepository interface {
+	List(filters map[string]interface{}) ([]*ReferenceOption, int64, error)
+	Save(item *ReferenceOption) error
 	Delete(id uint) error
 }
 

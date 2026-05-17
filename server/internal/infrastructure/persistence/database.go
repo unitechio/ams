@@ -41,6 +41,7 @@ func Migrate(db *gorm.DB) {
 		&GormSSOProvider{},
 		&GormLoginChannel{},
 		&GormSecurityPolicy{},
+		&GormReferenceOption{},
 		&GormAuditLog{},
 		&GormAuthHistory{},
 	)
@@ -82,6 +83,7 @@ func SyncMenus(db *gorm.DB) {
 		{ID: 12, Title: "SSO Providers", URL: "/sso-providers", SortOrder: 765, Icon: "Waypoints", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
 		{ID: 13, Title: "Login Channels", URL: "/login-channels", SortOrder: 762, Icon: "Workflow", PermissionCode: string(permission.PermissionChannelRead), ParentID: &u20},
 		{ID: 14, Title: "Security Policies", URL: "/security-policies", SortOrder: 761, Icon: "ShieldAlert", PermissionCode: string(permission.PermissionPolicyRead), ParentID: &u20},
+		{ID: 15, Title: "Reference Options", URL: "/reference-options", SortOrder: 759, Icon: "ListTree", PermissionCode: string(permission.PermissionOptionRead), ParentID: &u20},
 		{ID: 11, Title: "Service Accounts", URL: "/service-accounts", SortOrder: 760, Icon: "Bot", PermissionCode: string(permission.PermissionServiceRead), ParentID: &u20},
 
 		{ID: 30, Title: "Nhật ký", URL: "#", SortOrder: 500, Icon: "FileText", PermissionCode: ""},
@@ -228,6 +230,63 @@ func SyncSecurityPolicies(db *gorm.DB) {
 		}
 	}
 	log.Println("✅ Default security policies synchronized")
+}
+
+func SyncReferenceOptions(db *gorm.DB) {
+	items := []GormReferenceOption{
+		{OptionGroup: "client_template", Value: "spa_web", Label: "SPA Web", Description: "Public SPA dùng authorization_code + PKCE", SortOrder: 10, Active: true, MetaJSON: `{"app_type":"web_app","public":true,"channels":["web"],"grants":["authorization_code","refresh_token"],"trusted_types":["browser"],"pkce_required":true,"audiences":["web-api"],"tags":["portal","spa"]}`},
+		{OptionGroup: "client_template", Value: "crm_portal", Label: "CRM Portal", Description: "Confidential client cho backoffice CRM", SortOrder: 20, Active: true, MetaJSON: `{"app_type":"admin_portal","public":false,"channels":["crm","web"],"grants":["authorization_code","refresh_token"],"trusted_types":["browser","desktop"],"pkce_required":false,"audiences":["crm-api"],"tags":["crm","backoffice"]}`},
+		{OptionGroup: "client_template", Value: "mobile_pkce", Label: "Mobile PKCE", Description: "Public mobile app dùng PKCE", SortOrder: 30, Active: true, MetaJSON: `{"app_type":"mobile_app","public":true,"channels":["mobile"],"grants":["authorization_code","refresh_token"],"trusted_types":["mobile"],"pkce_required":true,"audiences":["mobile-api"],"tags":["mobile","public"]}`},
+		{OptionGroup: "client_template", Value: "kiosk_public", Label: "Kiosk", Description: "Kiosk client với trust boundary thấp hơn", SortOrder: 40, Active: true, MetaJSON: `{"app_type":"kiosk","public":true,"channels":["kiosk"],"grants":["authorization_code","refresh_token"],"trusted_types":["device","browser"],"pkce_required":true,"audiences":["kiosk-api"],"tags":["kiosk","shared"]}`},
+		{OptionGroup: "client_template", Value: "service_m2m", Label: "Internal Service", Description: "Service account dùng client_credentials", SortOrder: 50, Active: true, MetaJSON: `{"app_type":"internal_service","public":false,"channels":["service"],"grants":["client_credentials"],"trusted_types":["server"],"pkce_required":false,"audiences":["internal-api"],"tags":["service","internal"]}`},
+		{OptionGroup: "client_template", Value: "partner_oidc", Label: "Partner Portal", Description: "Portal/integration cho đối tác", SortOrder: 60, Active: true, MetaJSON: `{"app_type":"partner_api","public":false,"channels":["partner"],"grants":["authorization_code","refresh_token"],"trusted_types":["browser","server"],"pkce_required":false,"audiences":["partner-api"],"tags":["partner","external"]}`},
+		{OptionGroup: "client_template", Value: "custom", Label: "Custom", Description: "Template tự do cho trường hợp mở rộng", SortOrder: 70, Active: true, MetaJSON: `{"app_type":"web_app","public":true,"channels":["web"],"grants":["authorization_code","refresh_token"],"trusted_types":["browser"],"pkce_required":true,"audiences":["default-api"],"tags":["custom"]}`},
+
+		{OptionGroup: "client_environment", Value: "dev", Label: "Development", SortOrder: 10, Active: true},
+		{OptionGroup: "client_environment", Value: "stg", Label: "Staging", SortOrder: 20, Active: true},
+		{OptionGroup: "client_environment", Value: "prod", Label: "Production", SortOrder: 30, Active: true},
+
+		{OptionGroup: "client_app_type", Value: "web_app", Label: "Web App", SortOrder: 10, Active: true},
+		{OptionGroup: "client_app_type", Value: "mobile_app", Label: "Mobile App", SortOrder: 20, Active: true},
+		{OptionGroup: "client_app_type", Value: "admin_portal", Label: "Admin Portal", SortOrder: 30, Active: true},
+		{OptionGroup: "client_app_type", Value: "kiosk", Label: "Kiosk", SortOrder: 40, Active: true},
+		{OptionGroup: "client_app_type", Value: "internal_service", Label: "Internal Service", SortOrder: 50, Active: true},
+		{OptionGroup: "client_app_type", Value: "partner_api", Label: "Partner API", SortOrder: 60, Active: true},
+
+		{OptionGroup: "client_approval_status", Value: "approved", Label: "Approved", SortOrder: 10, Active: true},
+		{OptionGroup: "client_approval_status", Value: "pending", Label: "Pending Approval", SortOrder: 20, Active: true},
+		{OptionGroup: "client_approval_status", Value: "rejected", Label: "Rejected", SortOrder: 30, Active: true},
+
+		{OptionGroup: "policy_type", Value: "auth", Label: "Auth", SortOrder: 10, Active: true},
+		{OptionGroup: "policy_type", Value: "password", Label: "Password", SortOrder: 20, Active: true},
+		{OptionGroup: "policy_type", Value: "step_up", Label: "Step-up Action", SortOrder: 30, Active: true},
+
+		{OptionGroup: "policy_scope_type", Value: "global", Label: "Global", SortOrder: 10, Active: true},
+		{OptionGroup: "policy_scope_type", Value: "client", Label: "Client", SortOrder: 20, Active: true},
+		{OptionGroup: "policy_scope_type", Value: "channel", Label: "Channel", SortOrder: 30, Active: true},
+		{OptionGroup: "policy_scope_type", Value: "client_channel", Label: "Client + Channel", SortOrder: 40, Active: true},
+
+		{OptionGroup: "step_up_action", Value: "client.rotate_secret", Label: "client.rotate_secret", SortOrder: 10, Active: true},
+		{OptionGroup: "step_up_action", Value: "policy.update", Label: "policy.update", SortOrder: 20, Active: true},
+		{OptionGroup: "step_up_action", Value: "device.revoke", Label: "device.revoke", SortOrder: 30, Active: true},
+		{OptionGroup: "step_up_action", Value: "user.reset_password", Label: "user.reset_password", SortOrder: 40, Active: true},
+		{OptionGroup: "step_up_action", Value: "session.revoke", Label: "session.revoke", SortOrder: 50, Active: true},
+		{OptionGroup: "step_up_action", Value: "2fa.disable", Label: "2fa.disable", SortOrder: 60, Active: true},
+		{OptionGroup: "step_up_action", Value: "role.assign_permissions", Label: "role.assign_permissions", SortOrder: 70, Active: true},
+		{OptionGroup: "step_up_action", Value: "client.delete", Label: "client.delete", SortOrder: 80, Active: true},
+		{OptionGroup: "step_up_action", Value: "policy.delete", Label: "policy.delete", SortOrder: 90, Active: true},
+
+		{OptionGroup: "channel_risk_level", Value: "low", Label: "Low", SortOrder: 10, Active: true},
+		{OptionGroup: "channel_risk_level", Value: "medium", Label: "Medium", SortOrder: 20, Active: true},
+		{OptionGroup: "channel_risk_level", Value: "high", Label: "High", SortOrder: 30, Active: true},
+	}
+	for _, item := range items {
+		var existing GormReferenceOption
+		if err := db.Where("option_group = ? AND value = ?", item.OptionGroup, item.Value).First(&existing).Error; err != nil {
+			db.Create(&item)
+		}
+	}
+	log.Println("✅ Default reference options synchronized")
 }
 
 func SyncAuthClients(db *gorm.DB) {

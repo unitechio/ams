@@ -32,6 +32,7 @@ func main() {
 	ssoProviderRepo := persistence.NewGormSSOProviderRepository(db)
 	loginChannelRepo := persistence.NewGormLoginChannelRepository(db)
 	securityPolicyRepo := persistence.NewGormSecurityPolicyRepository(db)
+	referenceOptionRepo := persistence.NewGormReferenceOptionRepository(db)
 	auditRepo := persistence.NewGormAuditLogRepository(db)
 	authHistRepo := persistence.NewGormAuthHistoryRepository(db)
 
@@ -41,6 +42,7 @@ func main() {
 	persistence.SyncAuthClients(db)
 	persistence.SyncLoginChannels(db)
 	persistence.SyncSecurityPolicies(db)
+	persistence.SyncReferenceOptions(db)
 
 	// ── Seed initial data (only if DB is empty) ───────────────────────────────
 	persistence.Seed(db, permRepo)
@@ -64,6 +66,7 @@ func main() {
 	ssoProviderUC := usecase.NewSSOProviderUsecase(ssoProviderRepo)
 	loginChannelUC := usecase.NewLoginChannelUsecase(loginChannelRepo)
 	securityPolicyUC := usecase.NewSecurityPolicyUsecase(securityPolicyRepo)
+	referenceOptionUC := usecase.NewReferenceOptionUsecase(referenceOptionRepo)
 	roleUC := usecase.NewRoleUsecase(roleRepo)
 	permUC := usecase.NewPermissionUsecase(permRepo)
 	menuUC := usecase.NewMenuUsecase(menuRepo)
@@ -76,6 +79,7 @@ func main() {
 	ssoProviderHandler := delivery.NewSSOProviderHandler(ssoProviderUC)
 	loginChannelHandler := delivery.NewLoginChannelHandler(loginChannelUC)
 	securityPolicyHandler := delivery.NewSecurityPolicyHandler(securityPolicyUC)
+	referenceOptionHandler := delivery.NewReferenceOptionHandler(referenceOptionUC)
 	roleHandler := delivery.NewRoleHandler(roleUC)
 	permHandler := delivery.NewPermissionHandler(permUC)
 	menuHandler := delivery.NewMenuHandler(menuUC)
@@ -93,6 +97,7 @@ func main() {
 		ssoProviderHandler,
 		loginChannelHandler,
 		securityPolicyHandler,
+		referenceOptionHandler,
 		roleHandler,
 		permHandler,
 		menuHandler,
