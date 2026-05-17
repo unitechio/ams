@@ -85,14 +85,14 @@ func Setup(
 			authGrp.POST("/step-up", authH.StepUp)
 
 			// Session Management
-			authGrp.GET("/sessions", authH.Sessions)
-			authGrp.DELETE("/sessions/:id", middleware.RequireStepUp(jwtSvc), authH.RevokeSession)
-			authGrp.DELETE("/sessions", middleware.RequireStepUp(jwtSvc), authH.RevokeAllSessions)
+		authGrp.GET("/sessions", authH.Sessions)
+		authGrp.DELETE("/sessions/:id", middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "session.revoke", true), authH.RevokeSession)
+		authGrp.DELETE("/sessions", middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "session.revoke", true), authH.RevokeAllSessions)
 
 			// 2FA Management
-			authGrp.POST("/2fa/setup", authH.Setup2FA)
-			authGrp.POST("/2fa/verify", authH.Verify2FA)
-			authGrp.POST("/2fa/disable", middleware.RequireStepUp(jwtSvc), authH.Disable2FA)
+		authGrp.POST("/2fa/setup", authH.Setup2FA)
+		authGrp.POST("/2fa/verify", authH.Verify2FA)
+		authGrp.POST("/2fa/disable", middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "2fa.disable", true), authH.Disable2FA)
 		}
 
 		// Permission-filtered menu for current user (used by sidebar)
@@ -149,7 +149,7 @@ func Setup(
 			// Assign permissions to role requires role.assign
 			roles.PUT("/:id/permissions",
 				middleware.RequirePermission(permission.PermissionRoleAssign),
-				middleware.RequireStepUp(jwtSvc),
+				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "role.assign_permissions", true),
 				roleH.AssignPermissions,
 			)
 		}
@@ -213,7 +213,7 @@ func Setup(
 			)
 			clients.DELETE("/:id",
 				middleware.RequirePermission(permission.PermissionClientDelete),
-				middleware.RequireStepUp(jwtSvc),
+				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "client.delete", true),
 				clientH.Delete,
 			)
 		}
@@ -239,7 +239,7 @@ func Setup(
 			)
 			serviceAccounts.DELETE("/:id",
 				middleware.RequirePermission(permission.PermissionServiceDelete),
-				middleware.RequireStepUp(jwtSvc),
+				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "client.delete", true),
 				clientH.Delete,
 			)
 		}
@@ -302,7 +302,7 @@ func Setup(
 			)
 			securityPolicies.DELETE("/:id",
 				middleware.RequirePermission(permission.PermissionPolicyDelete),
-				middleware.RequireStepUp(jwtSvc),
+				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "policy.delete", true),
 				securityPolicyH.Delete,
 			)
 		}
