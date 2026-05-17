@@ -78,6 +78,10 @@ const (
 	// ── Audit
 	PermissionAuditRead Permission = "audit.read"
 	PermissionAuthRead  Permission = "auth.read"
+
+	// ── Device Management
+	PermissionDeviceRead   Permission = "device.read"
+	PermissionDeviceRevoke Permission = "device.revoke"
 )
 
 // ─── Permission Group Registry ────────────────────────────────────────────────
@@ -122,6 +126,11 @@ var Registry = []PermissionGroup{
 		Name:        "audit",
 		Description: "Nhật ký hệ thống",
 		Permissions: []Permission{PermissionAuditRead, PermissionAuthRead},
+	},
+	{
+		Name:        "device",
+		Description: "Quản lý thiết bị và phiên đăng nhập",
+		Permissions: []Permission{PermissionDeviceRead, PermissionDeviceRevoke},
 	},
 }
 

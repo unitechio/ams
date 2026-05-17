@@ -227,6 +227,18 @@ export interface SSOProvider {
   type: string;
 }
 
+export interface DeviceSession {
+  id: string;
+  user_id: number;
+  username: string;
+  email: string;
+  device: string;
+  ip: string;
+  client_id: string;
+  trusted: boolean;
+  last_active: string;
+}
+
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -280,6 +292,19 @@ export const authApi = {
     authRequest<SSOProvider[]>('GET', '/auth/sso/providers'),
   startSSO: (provider: string) =>
     authRequest<{ redirect_url: string }>('GET', `/auth/sso/${provider}/start`),
+};
+
+export const devicesApi = {
+  list: (params?: { search?: string; client_id?: string; trusted?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.client_id) q.set('client_id', params.client_id);
+    if (params?.trusted) q.set('trusted', params.trusted);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.page_size) q.set('page_size', String(params.page_size));
+    return get<PaginatedResponse<DeviceSession>>(`/devices?${q}`);
+  },
+  revoke: (id: string) => del<void>(`/devices/${id}`),
 };
 
 // ─── Users API ────────────────────────────────────────────────────────────────

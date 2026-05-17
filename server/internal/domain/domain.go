@@ -146,6 +146,8 @@ type PermissionLine struct {
 type RefreshToken struct {
 	ID                uint
 	UserID            uint
+	Username          string
+	UserEmail         string
 	Token             string
 	SessionID         string
 	TokenFamily       string
@@ -244,8 +246,10 @@ type TokenRepository interface {
 	RevokeByUserID(userID uint) error
 	RevokeToken(token string) error
 	RevokeSession(userID uint, sessionID string) error
+	RevokeSessionByID(sessionID string) error
 	RevokeFamily(familyID string, reason string) error
 	ListActiveSessions(userID uint) ([]*RefreshToken, error)
+	ListSessions(filters map[string]interface{}) ([]*RefreshToken, int64, error)
 	FindTrustedDevice(userID uint, clientID, fingerprint string) (*RefreshToken, error)
 }
 

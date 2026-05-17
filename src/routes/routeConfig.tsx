@@ -22,6 +22,7 @@ const AssignRolePermissionsPage = lazy(
 const UserRolesPage = lazy(() => import("@/pages/UserRolesPage"));
 const AuthHistoryPage = lazy(() => import("@/pages/AuthHistoryPage"));
 const AuditLogPage = lazy(() => import("@/pages/AuditLogPage"));
+const DevicesPage = lazy(() => import("@/pages/DevicesPage"));
 
 export const routes: RouteObject[] = [
   {
@@ -138,6 +139,14 @@ export const routes: RouteObject[] = [
             ),
           },
         ],
+      },
+      {
+        path: "devices",
+        element: (
+          <ProtectedRoute permissions={[PERMISSIONS.DEVICE_READ]}>
+            {Loadable(DevicesPage)({})}
+          </ProtectedRoute>
+        ),
       },
     ],
   },

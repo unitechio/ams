@@ -78,6 +78,7 @@ func SyncMenus(db *gorm.DB) {
 		{ID: 30, Title: "Nhật ký", URL: "#", SortOrder: 500, Icon: "FileText", PermissionCode: ""},
 		{ID: 31, Title: "Lịch sử Login", URL: "/logs/auth", SortOrder: 490, Icon: "History", PermissionCode: string(permission.PermissionAuthRead), ParentID: &u30},
 		{ID: 32, Title: "Audit Log", URL: "/logs/audit", SortOrder: 480, Icon: "Activity", PermissionCode: string(permission.PermissionAuditRead), ParentID: &u30},
+		{ID: 33, Title: "Thiết bị", URL: "/devices", SortOrder: 470, Icon: "Smartphone", PermissionCode: string(permission.PermissionDeviceRead), ParentID: &u30},
 
 		{ID: 6, Title: "Cài đặt", URL: "/settings", SortOrder: 100, Icon: "Settings", PermissionCode: string(permission.PermissionSettingRead)},
 	}

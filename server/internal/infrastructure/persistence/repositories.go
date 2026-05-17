@@ -3,6 +3,7 @@ package persistence
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/owner/auth-server/internal/authorization/permission"
@@ -512,6 +513,12 @@ func (r *GormTokenRepository) RevokeSession(userID uint, sessionID string) error
 		Updates(map[string]interface{}{"revoked": true, "revoked_reason": "session_revoked"}).Error
 }
 
+func (r *GormTokenRepository) RevokeSessionByID(sessionID string) error {
+	return r.db.Model(&GormRefreshToken{}).
+		Where("session_id = ?", sessionID).
+		Updates(map[string]interface{}{"revoked": true, "revoked_reason": "admin_session_revoked"}).Error
+}
+
 func (r *GormTokenRepository) RevokeFamily(familyID string, reason string) error {
 	return r.db.Model(&GormRefreshToken{}).
 		Where("token_family = ?", familyID).
@@ -555,6 +562,82 @@ func (r *GormTokenRepository) ListActiveSessions(userID uint) ([]*domain.Refresh
 		})
 	}
 	return result, nil
+}
+
+func (r *GormTokenRepository) ListSessions(filters map[string]interface{}) ([]*domain.RefreshToken, int64, error) {
+	type row struct {
+		GormRefreshToken
+		Username string
+		Email    string
+	}
+	q := r.db.Table("sys_refresh_tokens rt").
+		Select("rt.*, u.username, u.email").
+		Joins("JOIN sys_users u ON u.id = rt.user_id").
+		Where("rt.revoked = false AND rt.expires_at > ? AND u.deleted = false", time.Now())
+
+	if search, ok := filters["search"].(string); ok && strings.TrimSpace(search) != "" {
+		like := "%" + strings.TrimSpace(search) + "%"
+		q = q.Where("(u.username ILIKE ? OR u.email ILIKE ? OR rt.device_name ILIKE ? OR rt.client_id ILIKE ? OR rt.ip_address ILIKE ?)", like, like, like, like, like)
+	}
+	if clientID, ok := filters["client_id"].(string); ok && strings.TrimSpace(clientID) != "" {
+		q = q.Where("rt.client_id = ?", strings.TrimSpace(clientID))
+	}
+	if trustedValue, ok := filters["trusted"].(string); ok && strings.TrimSpace(trustedValue) != "" {
+		trusted := strings.EqualFold(trustedValue, "true")
+		q = q.Where("rt.trusted = ?", trusted)
+	}
+
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	page, _ := filters["page"].(int)
+	pageSize, _ := filters["page_size"].(int)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var rows []row
+	if err := q.Order("rt.last_used_at DESC, rt.created_at DESC").Offset(offset).Limit(pageSize).Find(&rows).Error; err != nil {
+		return nil, 0, err
+	}
+
+	result := make([]*domain.RefreshToken, 0, len(rows))
+	seen := map[string]bool{}
+	for _, item := range rows {
+		if item.SessionID == "" || seen[item.SessionID] {
+			continue
+		}
+		seen[item.SessionID] = true
+		result = append(result, &domain.RefreshToken{
+			ID:                item.ID,
+			UserID:            item.UserID,
+			Username:          item.Username,
+			UserEmail:         item.Email,
+			Token:             item.Token,
+			SessionID:         item.SessionID,
+			TokenFamily:       item.TokenFamily,
+			ClientID:          item.ClientID,
+			DeviceName:        item.DeviceName,
+			DeviceFingerprint: item.DeviceFingerprint,
+			IPAddress:         item.IPAddress,
+			UserAgent:         item.UserAgent,
+			Trusted:           item.Trusted,
+			RotatedFrom:       item.RotatedFrom,
+			RevokedReason:     item.RevokedReason,
+			ExpiresAt:         item.ExpiresAt,
+			LastUsedAt:        item.LastUsedAt,
+			ReuseDetectedAt:   item.ReuseDetectedAt,
+			Revoked:           item.Revoked,
+			CreatedAt:         item.CreatedAt,
+		})
+	}
+	return result, total, nil
 }
 
 func (r *GormTokenRepository) FindTrustedDevice(userID uint, clientID, fingerprint string) (*domain.RefreshToken, error) {

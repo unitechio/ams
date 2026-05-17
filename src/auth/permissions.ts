@@ -48,6 +48,10 @@ export const PERMISSIONS = {
   AUDIT_READ: 'audit.read' as const,
   AUTH_READ:  'auth.read'  as const,
 
+  // ── Device Management
+  DEVICE_READ: 'device.read' as const,
+  DEVICE_REVOKE: 'device.revoke' as const,
+
   // ── Wildcard (Super Admin bypass)
   WILDCARD: '*' as const,
 } as const;
@@ -100,6 +104,10 @@ export const PERMISSION_GROUPS: { name: string; label: string; permissions: Perm
     name: 'audit', label: 'Nhật ký',
     permissions: [PERMISSIONS.AUDIT_READ, PERMISSIONS.AUTH_READ],
   },
+  {
+    name: 'device', label: 'Thiết bị',
+    permissions: [PERMISSIONS.DEVICE_READ, PERMISSIONS.DEVICE_REVOKE],
+  },
 ];
 
 // Permission display names
@@ -129,5 +137,7 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'setting.update':     'Cập nhật cài đặt',
   'audit.read':         'Xem nhật ký audit',
   'auth.read':          'Xem lịch sử login',
+  'device.read':        'Xem thiết bị đăng nhập',
+  'device.revoke':      'Thu hồi thiết bị đăng nhập',
   '*':                  'Toàn quyền (Super Admin)',
 };

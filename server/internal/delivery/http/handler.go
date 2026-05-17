@@ -157,6 +157,31 @@ func (h *AuthHandler) RevokeAllSessions(c *gin.Context) {
 	ok(c, gin.H{"message": "Đã thu hồi tất cả phiên khác"})
 }
 
+func (h *AuthHandler) Devices(c *gin.Context) {
+	page, pageSize := pagingParams(c)
+	filters := map[string]interface{}{
+		"search":    c.Query("search"),
+		"client_id": c.Query("client_id"),
+		"trusted":   c.Query("trusted"),
+		"page":      page,
+		"page_size": pageSize,
+	}
+	result, err := h.uc.ListDevices(filters)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ok(c, result)
+}
+
+func (h *AuthHandler) RevokeDevice(c *gin.Context) {
+	if err := h.uc.AdminRevokeDevice(c.Param("id")); err != nil {
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ok(c, gin.H{"message": "Đã thu hồi thiết bị"})
+}
+
 func (h *AuthHandler) Setup2FA(c *gin.Context) {
 	data, err := h.uc.Setup2FA(middleware.GetUserID(c))
 	if err != nil {

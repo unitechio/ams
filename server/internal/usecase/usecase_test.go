@@ -2,12 +2,14 @@ package usecase
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/owner/auth-server/internal/domain"
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
 	passwordsvc "github.com/owner/auth-server/internal/security/password"
+	"github.com/owner/auth-server/internal/security/ratelimit"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -144,6 +146,11 @@ func (r *testTokenRepo) RevokeSession(userID uint, sessionID string) error {
 	return nil
 }
 
+func (r *testTokenRepo) RevokeSessionByID(sessionID string) error {
+	r.revokedSession = sessionID
+	return nil
+}
+
 func (r *testTokenRepo) RevokeFamily(familyID string, reason string) error {
 	r.revokedFamily = familyID
 	return nil
@@ -151,6 +158,10 @@ func (r *testTokenRepo) RevokeFamily(familyID string, reason string) error {
 
 func (r *testTokenRepo) ListActiveSessions(userID uint) ([]*domain.RefreshToken, error) {
 	return nil, nil
+}
+
+func (r *testTokenRepo) ListSessions(filters map[string]interface{}) ([]*domain.RefreshToken, int64, error) {
+	return nil, 0, nil
 }
 
 func (r *testTokenRepo) FindTrustedDevice(userID uint, clientID, fingerprint string) (*domain.RefreshToken, error) {
@@ -373,5 +384,35 @@ func TestStepUpAcceptsPersistedEmailOTP(t *testing.T) {
 	}
 	if userRepo.users[32].EmailOTPHash != "" {
 		t.Fatalf("expected email otp to be cleared after successful step-up")
+	}
+}
+
+func TestLoginRateLimitBlocksRepeatedFailures(t *testing.T) {
+	userRepo := newtestUserRepo()
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	identityKey := ratelimit.Normalize("login_identity", "127.0.0.1", "rate.user")
+	ipKey := ratelimit.Normalize("login_ip", "127.0.0.1")
+	loginIdentityLimiter.Reset(identityKey)
+	loginIPLimiter.Reset(ipKey)
+	defer loginIdentityLimiter.Reset(identityKey)
+	defer loginIPLimiter.Reset(ipKey)
+
+	for attempt := 0; attempt < 7; attempt++ {
+		_, _ = authUC.Login(&LoginRequest{
+			Username:  "rate.user",
+			Password:  "WrongPass@123",
+			IPAddress: "127.0.0.1",
+			UserAgent: "go test",
+		})
+	}
+
+	_, err := authUC.Login(&LoginRequest{
+		Username:  "rate.user",
+		Password:  "WrongPass@123",
+		IPAddress: "127.0.0.1",
+		UserAgent: "go test",
+	})
+	if err == nil || !strings.Contains(err.Error(), "giới hạn") {
+		t.Fatalf("expected rate limit error, got %v", err)
 	}
 }

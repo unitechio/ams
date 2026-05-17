@@ -18,6 +18,7 @@ import (
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
 	"github.com/owner/auth-server/internal/security/clientpolicy"
 	passwordsvc "github.com/owner/auth-server/internal/security/password"
+	"github.com/owner/auth-server/internal/security/ratelimit"
 	totpsvc "github.com/owner/auth-server/internal/security/totp"
 )
 
@@ -30,6 +31,8 @@ var (
 		sync.RWMutex
 		m map[string]uint
 	}{m: make(map[string]uint)}
+	loginIPLimiter       = ratelimit.New(20, 5*time.Minute, 15*time.Minute)
+	loginIdentityLimiter = ratelimit.New(7, 10*time.Minute, 30*time.Minute)
 )
 
 const maxFailedLogins = 5
@@ -72,6 +75,18 @@ type LoginResponse struct {
 type StepUpResponse struct {
 	StepUpToken string    `json:"step_up_token"`
 	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type DeviceListItem struct {
+	ID         string `json:"id"`
+	UserID     uint   `json:"user_id"`
+	Username   string `json:"username"`
+	Email      string `json:"email"`
+	Device     string `json:"device"`
+	IP         string `json:"ip"`
+	ClientID   string `json:"client_id"`
+	Trusted    bool   `json:"trusted"`
+	LastActive string `json:"last_active"`
 }
 
 type UserInfo struct {
@@ -125,8 +140,21 @@ func NewAuthUsecase(
 }
 
 func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
+	now := time.Now()
+	ipKey := ratelimit.Normalize("login_ip", req.IPAddress)
+	identityKey := ratelimit.Normalize("login_identity", req.IPAddress, req.Username)
+	if err := loginIPLimiter.Allow(ipKey, now); err != nil {
+		uc.recordLoginHistory(0, req.Username, req.IPAddress, req.UserAgent, "blocked", "Rate limit theo IP")
+		return nil, errors.New("quá nhiều lần đăng nhập từ IP này, vui lòng thử lại sau")
+	}
+	if err := loginIdentityLimiter.Allow(identityKey, now); err != nil {
+		uc.recordLoginHistory(0, req.Username, req.IPAddress, req.UserAgent, "blocked", "Rate limit theo tài khoản/IP")
+		return nil, errors.New("đăng nhập bị giới hạn tạm thời do quá nhiều lần thất bại")
+	}
 	user, err := uc.userRepo.FindByUsername(req.Username)
 	if err != nil {
+		loginIPLimiter.RegisterFailure(ipKey, now)
+		loginIdentityLimiter.RegisterFailure(identityKey, now)
 		uc.recordLoginHistory(0, req.Username, req.IPAddress, req.UserAgent, "failed", "Người dùng không tồn tại")
 		return nil, ErrInvalidCredentials
 	}
@@ -151,6 +179,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 	}
 	passwordOK, needsRehash, err := passwordsvc.Verify(user.PasswordHash, req.Password)
 	if err != nil || !passwordOK {
+		loginIPLimiter.RegisterFailure(ipKey, now)
+		loginIdentityLimiter.RegisterFailure(identityKey, now)
 		failed := user.FailedLogins + 1
 		var lockUntil *time.Time
 		note := "Sai mật khẩu"
@@ -178,6 +208,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 			return nil, ErrOTPRequired
 		}
 		if !totpsvc.ValidateCode(user.TOTPSecret, strings.TrimSpace(req.OTPCode), time.Now()) {
+			loginIPLimiter.RegisterFailure(ipKey, now)
+			loginIdentityLimiter.RegisterFailure(identityKey, now)
 			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Mã TOTP không hợp lệ")
 			return nil, errors.New("mã OTP không hợp lệ")
 		}
@@ -190,6 +222,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 			return nil, ErrOTPRequired
 		}
 		if !verifyOneTimeCode(user.EmailOTPHash, user.EmailOTPExpiresAt, strings.TrimSpace(req.OTPCode)) {
+			loginIPLimiter.RegisterFailure(ipKey, now)
+			loginIdentityLimiter.RegisterFailure(identityKey, now)
 			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Email OTP không hợp lệ")
 			return nil, errors.New("mã OTP không hợp lệ")
 		}
@@ -197,6 +231,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 		user.EmailOTPExpiresAt = nil
 		_ = uc.userRepo.Save(user)
 	}
+	loginIPLimiter.Reset(ipKey)
+	loginIdentityLimiter.Reset(identityKey)
 	if needsRehash {
 		if rehashed, hashErr := passwordsvc.Hash(req.Password); hashErr == nil {
 			user.PasswordHash = rehashed
@@ -400,6 +436,8 @@ type SessionResponse struct {
 	IsCurrent  bool   `json:"is_current"`
 }
 
+type DeviceListResponse = PaginatedResult[DeviceListItem]
+
 type Setup2FAResponse struct {
 	Secret    string `json:"secret"`
 	QRCodeURL string `json:"qr_code_url"`
@@ -432,6 +470,40 @@ func (uc *AuthUsecase) RevokeSession(userID uint, sessionID string) error {
 
 func (uc *AuthUsecase) RevokeAllSessions(userID uint) error {
 	return uc.tokenRepo.RevokeByUserID(userID)
+}
+
+func (uc *AuthUsecase) ListDevices(filters map[string]interface{}) (*DeviceListResponse, error) {
+	sessions, total, err := uc.tokenRepo.ListSessions(filters)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]DeviceListItem, 0, len(sessions))
+	for _, session := range sessions {
+		items = append(items, DeviceListItem{
+			ID:         session.SessionID,
+			UserID:     session.UserID,
+			Username:   session.Username,
+			Email:      session.UserEmail,
+			Device:     session.DeviceName,
+			IP:         session.IPAddress,
+			ClientID:   session.ClientID,
+			Trusted:    session.Trusted,
+			LastActive: session.LastUsedAt.Format(time.RFC3339),
+		})
+	}
+	page, _ := filters["page"].(int)
+	pageSize, _ := filters["page_size"].(int)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	return paginate(items, total, page, pageSize), nil
+}
+
+func (uc *AuthUsecase) AdminRevokeDevice(sessionID string) error {
+	return uc.tokenRepo.RevokeSessionByID(sessionID)
 }
 
 func (uc *AuthUsecase) Setup2FA(userID uint) (*Setup2FAResponse, error) {

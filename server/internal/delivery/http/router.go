@@ -196,6 +196,17 @@ func Setup(
 				logH.ListAuthHistory,
 			)
 		}
+
+		devices := auth.Group("/devices")
+		devices.Use(middleware.RequirePermission(permission.PermissionDeviceRead))
+		{
+			devices.GET("", authH.Devices)
+			devices.DELETE("/:id",
+				middleware.RequirePermission(permission.PermissionDeviceRevoke),
+				middleware.RequireStepUp(jwtSvc),
+				authH.RevokeDevice,
+			)
+		}
 	}
 
 	return r
