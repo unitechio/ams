@@ -707,7 +707,8 @@ func (r *GormClientRepository) List(filters map[string]interface{}) ([]*domain.A
 	q := r.db.Model(&GormAuthClient{})
 	if search, ok := filters["search"].(string); ok && strings.TrimSpace(search) != "" {
 		like := "%" + strings.TrimSpace(search) + "%"
-		q = q.Where("client_id ILIKE ? OR name ILIKE ? OR app_type ILIKE ?", like, like, like)
+		q = q.Where("client_id ILIKE ? OR name ILIKE ? OR app_type ILIKE ? OR client_template ILIKE ? OR environment ILIKE ? OR domain_group ILIKE ? OR owner_team ILIKE ? OR approval_status ILIKE ?",
+			like, like, like, like, like, like, like, like)
 	}
 	if appType, ok := filters["app_type"].(string); ok && strings.TrimSpace(appType) != "" {
 		q = q.Where("app_type = ?", strings.TrimSpace(appType))
@@ -755,41 +756,61 @@ func (r *GormClientRepository) Delete(id uint) error {
 
 func gormToClient(model *GormAuthClient) *domain.AuthClient {
 	return &domain.AuthClient{
-		ID:           model.ID,
-		ClientID:     model.ClientID,
-		ClientSecret: model.ClientSecret,
-		Name:         model.Name,
-		Description:  model.Description,
-		AppType:      model.AppType,
-		Public:       model.Public,
-		PKCERequired: model.PKCERequired,
-		Active:       model.Active,
-		GrantTypes:   decodeJSONList(model.GrantTypesJSON),
-		RedirectURIs: decodeJSONList(model.RedirectURIsJSON),
-		Audiences:    decodeJSONList(model.AudiencesJSON),
-		Channels:     decodeJSONList(model.ChannelsJSON),
-		TrustedTypes: decodeJSONList(model.TrustedTypesJSON),
-		CreatedAt:    model.CreatedAt,
-		UpdatedAt:    model.UpdatedAt,
+		ID:                  model.ID,
+		ClientID:            model.ClientID,
+		ClientSecret:        model.ClientSecret,
+		Name:                model.Name,
+		Description:         model.Description,
+		AppType:             model.AppType,
+		ClientTemplate:      model.ClientTemplate,
+		Environment:         model.Environment,
+		DomainGroup:         model.DomainGroup,
+		OwnerTeam:           model.OwnerTeam,
+		Public:              model.Public,
+		PKCERequired:        model.PKCERequired,
+		Active:              model.Active,
+		LegacyPasswordGrant: model.LegacyPasswordGrant,
+		ApprovalStatus:      model.ApprovalStatus,
+		GrantTypes:          decodeJSONList(model.GrantTypesJSON),
+		RedirectURIs:        decodeJSONList(model.RedirectURIsJSON),
+		Audiences:           decodeJSONList(model.AudiencesJSON),
+		Channels:            decodeJSONList(model.ChannelsJSON),
+		TrustedTypes:        decodeJSONList(model.TrustedTypesJSON),
+		Tags:                decodeJSONList(model.TagsJSON),
+		SecretVersion:       model.SecretVersion,
+		SecretRotatedAt:     model.SecretRotatedAt,
+		SecretExpiresAt:     model.SecretExpiresAt,
+		CreatedAt:           model.CreatedAt,
+		UpdatedAt:           model.UpdatedAt,
 	}
 }
 
 func clientToGorm(client *domain.AuthClient) *GormAuthClient {
 	return &GormAuthClient{
-		ID:               client.ID,
-		ClientID:         client.ClientID,
-		ClientSecret:     client.ClientSecret,
-		Name:             client.Name,
-		Description:      client.Description,
-		AppType:          client.AppType,
-		Public:           client.Public,
-		PKCERequired:     client.PKCERequired,
-		Active:           client.Active,
-		GrantTypesJSON:   encodeJSONList(client.GrantTypes),
-		RedirectURIsJSON: encodeJSONList(client.RedirectURIs),
-		AudiencesJSON:    encodeJSONList(client.Audiences),
-		ChannelsJSON:     encodeJSONList(client.Channels),
-		TrustedTypesJSON: encodeJSONList(client.TrustedTypes),
+		ID:                  client.ID,
+		ClientID:            client.ClientID,
+		ClientSecret:        client.ClientSecret,
+		Name:                client.Name,
+		Description:         client.Description,
+		AppType:             client.AppType,
+		ClientTemplate:      client.ClientTemplate,
+		Environment:         client.Environment,
+		DomainGroup:         client.DomainGroup,
+		OwnerTeam:           client.OwnerTeam,
+		Public:              client.Public,
+		PKCERequired:        client.PKCERequired,
+		Active:              client.Active,
+		LegacyPasswordGrant: client.LegacyPasswordGrant,
+		ApprovalStatus:      client.ApprovalStatus,
+		GrantTypesJSON:      encodeJSONList(client.GrantTypes),
+		RedirectURIsJSON:    encodeJSONList(client.RedirectURIs),
+		AudiencesJSON:       encodeJSONList(client.Audiences),
+		ChannelsJSON:        encodeJSONList(client.Channels),
+		TrustedTypesJSON:    encodeJSONList(client.TrustedTypes),
+		TagsJSON:            encodeJSONList(client.Tags),
+		SecretVersion:       client.SecretVersion,
+		SecretRotatedAt:     client.SecretRotatedAt,
+		SecretExpiresAt:     client.SecretExpiresAt,
 	}
 }
 

@@ -253,16 +253,49 @@ export interface AuthClient {
   name: string;
   description: string;
   app_type: string;
+  client_template: string;
+  environment: string;
+  domain_group: string;
+  owner_team: string;
   public: boolean;
   pkce_required: boolean;
   active: boolean;
+  legacy_password_grant: boolean;
+  approval_status: string;
   grant_types: string[];
   redirect_uris: string[];
   audiences: string[];
   channels: string[];
   trusted_types: string[];
+  tags: string[];
+  secret_version: number;
+  secret_rotated_at?: string;
+  secret_expires_at?: string;
   created_at: string;
 }
+
+export type AuthClientPayload = {
+  client_id: string;
+  client_secret: string;
+  name: string;
+  description: string;
+  app_type: string;
+  client_template: string;
+  environment: string;
+  domain_group: string;
+  owner_team: string;
+  public: boolean;
+  pkce_required: boolean;
+  active: boolean;
+  legacy_password_grant: boolean;
+  approval_status: string;
+  grant_types: string[];
+  redirect_uris: string[];
+  audiences: string[];
+  channels: string[];
+  trusted_types: string[];
+  tags: string[];
+};
 
 export interface AdminSSOProvider {
   id: number;
@@ -410,8 +443,9 @@ export const clientsApi = {
     if (params?.page_size) q.set('page_size', String(params.page_size));
     return get<PaginatedResponse<AuthClient>>(`/auth-clients?${q}`);
   },
-  create: (data: Omit<AuthClient, 'id' | 'created_at'>) => post<AuthClient>('/auth-clients', data),
-  update: (id: number, data: Omit<AuthClient, 'id' | 'created_at'>) => put<AuthClient>(`/auth-clients/${id}`, data),
+  create: (data: AuthClientPayload) => post<AuthClient>('/auth-clients', data),
+  update: (id: number, data: AuthClientPayload) => put<AuthClient>(`/auth-clients/${id}`, data),
+  rotateSecret: (id: number) => post<AuthClient>(`/auth-clients/${id}/rotate-secret`, {}),
   delete: (id: number) => del<void>(`/auth-clients/${id}`),
   token: (client_id: string, client_secret: string) =>
     authRequest<{ access_token: string; token_type: string; expires_at: string; client_id: string; audiences: string[] }>('POST', '/auth/token', {
@@ -419,6 +453,21 @@ export const clientsApi = {
       client_secret,
       grant_type: 'client_credentials',
     }),
+};
+
+export const serviceAccountsApi = {
+  list: (params?: { search?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    q.set('app_type', 'internal_service');
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.page_size) q.set('page_size', String(params.page_size));
+    return get<PaginatedResponse<AuthClient>>(`/service-accounts?${q}`);
+  },
+  create: (data: AuthClientPayload) => post<AuthClient>('/service-accounts', data),
+  update: (id: number, data: AuthClientPayload) => put<AuthClient>(`/service-accounts/${id}`, data),
+  rotateSecret: (id: number) => post<AuthClient>(`/service-accounts/${id}/rotate-secret`, {}),
+  delete: (id: number) => del<void>(`/service-accounts/${id}`),
 };
 
 export const ssoProvidersAdminApi = {

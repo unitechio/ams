@@ -56,7 +56,7 @@ func main() {
 	// ── Usecases ──────────────────────────────────────────────────────────────
 	authUC := usecase.NewAuthUsecase(userRepo, tokenRepo, clientRepo, loginChannelRepo, permRepo, authHistRepo, jwtSvc, ssoProviderRepo)
 	userUC := usecase.NewUserUsecase(userRepo, tokenRepo)
-	clientUC := usecase.NewClientUsecase(clientRepo)
+	clientUC := usecase.NewClientUsecase(clientRepo, loginChannelRepo)
 	ssoProviderUC := usecase.NewSSOProviderUsecase(ssoProviderRepo)
 	loginChannelUC := usecase.NewLoginChannelUsecase(loginChannelRepo)
 	roleUC := usecase.NewRoleUsecase(roleRepo)

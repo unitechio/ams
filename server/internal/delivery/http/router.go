@@ -204,6 +204,11 @@ func Setup(
 				middleware.RequireStepUp(jwtSvc),
 				clientH.Update,
 			)
+			clients.POST("/:id/rotate-secret",
+				middleware.RequirePermission(permission.PermissionClientUpdate),
+				middleware.RequireStepUp(jwtSvc),
+				clientH.RotateSecret,
+			)
 			clients.DELETE("/:id",
 				middleware.RequirePermission(permission.PermissionClientDelete),
 				middleware.RequireStepUp(jwtSvc),
@@ -224,6 +229,11 @@ func Setup(
 				middleware.RequirePermission(permission.PermissionServiceUpdate),
 				middleware.RequireStepUp(jwtSvc),
 				clientH.Update,
+			)
+			serviceAccounts.POST("/:id/rotate-secret",
+				middleware.RequirePermission(permission.PermissionServiceUpdate),
+				middleware.RequireStepUp(jwtSvc),
+				clientH.RotateSecret,
 			)
 			serviceAccounts.DELETE("/:id",
 				middleware.RequirePermission(permission.PermissionServiceDelete),

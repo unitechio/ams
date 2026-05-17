@@ -544,6 +544,19 @@ func (h *ClientHandler) Delete(c *gin.Context) {
 	ok(c, gin.H{"message": "Đã xóa auth client"})
 }
 
+func (h *ClientHandler) RotateSecret(c *gin.Context) {
+	id, valid := parseID(c)
+	if !valid {
+		return
+	}
+	result, err := h.uc.RotateSecret(id)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	ok(c, result)
+}
+
 type SSOProviderHandler struct{ uc *usecase.SSOProviderUsecase }
 
 func NewSSOProviderHandler(uc *usecase.SSOProviderUsecase) *SSOProviderHandler {

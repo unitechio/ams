@@ -1,0 +1,10 @@
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS client_template TEXT DEFAULT 'custom';
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS environment TEXT DEFAULT 'prod';
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS domain_group TEXT DEFAULT 'core';
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS owner_team TEXT DEFAULT '';
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS legacy_password_grant BOOLEAN DEFAULT FALSE;
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'approved';
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS tags_json TEXT DEFAULT '[]';
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS secret_version INTEGER DEFAULT 1;
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS secret_rotated_at TIMESTAMP NULL;
+ALTER TABLE sys_auth_clients ADD COLUMN IF NOT EXISTS secret_expires_at TIMESTAMP NULL;

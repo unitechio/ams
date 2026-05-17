@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -396,6 +397,9 @@ func (uc *AuthUsecase) IssueClientToken(clientID, clientSecret, grantType string
 	if err != nil || !client.Active {
 		return nil, errors.New("client không tồn tại hoặc đã bị vô hiệu")
 	}
+	if client.ApprovalStatus != "" && client.ApprovalStatus != "approved" {
+		return nil, errors.New("client chưa được approval để cấp token")
+	}
 	if strings.TrimSpace(grantType) != "client_credentials" {
 		return nil, errors.New("grant_type này chưa được hỗ trợ cho token machine-to-machine")
 	}
@@ -404,6 +408,9 @@ func (uc *AuthUsecase) IssueClientToken(clientID, clientSecret, grantType string
 	}
 	if client.Public || strings.TrimSpace(clientSecret) != client.ClientSecret {
 		return nil, errors.New("client_secret không hợp lệ")
+	}
+	if client.SecretExpiresAt != nil && client.SecretExpiresAt.Before(time.Now()) {
+		return nil, errors.New("client_secret đã hết hạn, cần rotate secret")
 	}
 	token, err := uc.jwt.GenerateAccessToken(0, client.ClientID, []string{"service"}, generateOpaqueID(12), client.ClientID, cloneStrings(client.Audiences))
 	if err != nil {
@@ -426,8 +433,14 @@ func (uc *AuthUsecase) ExchangeAuthorizationCode(clientID, clientSecret, code, r
 	if err != nil || !client.Active {
 		return nil, errors.New("client không tồn tại hoặc đã bị vô hiệu")
 	}
+	if client.ApprovalStatus != "" && client.ApprovalStatus != "approved" {
+		return nil, errors.New("client chưa được approval để thực hiện authorization flow")
+	}
 	if !client.Public && strings.TrimSpace(clientSecret) != client.ClientSecret {
 		return nil, errors.New("client_secret không hợp lệ")
+	}
+	if !client.Public && client.SecretExpiresAt != nil && client.SecretExpiresAt.Before(time.Now()) {
+		return nil, errors.New("client_secret đã hết hạn, cần rotate secret")
 	}
 	mockAuthCodes.Lock()
 	authCode, ok := mockAuthCodes.m[strings.TrimSpace(code)]
@@ -1222,47 +1235,65 @@ func (uc *UserUsecase) ResetPassword(id uint, newPassword string, oneTimePasswor
 }
 
 type CreateClientReq struct {
-	ClientID     string   `json:"client_id" binding:"required"`
-	ClientSecret string   `json:"client_secret"`
-	Name         string   `json:"name" binding:"required"`
-	Description  string   `json:"description"`
-	AppType      string   `json:"app_type"`
-	Public       bool     `json:"public"`
-	PKCERequired bool     `json:"pkce_required"`
-	Active       bool     `json:"active"`
-	GrantTypes   []string `json:"grant_types"`
-	RedirectURIs []string `json:"redirect_uris"`
-	Audiences    []string `json:"audiences"`
-	Channels     []string `json:"channels"`
-	TrustedTypes []string `json:"trusted_types"`
+	ClientID            string   `json:"client_id" binding:"required"`
+	ClientSecret        string   `json:"client_secret"`
+	Name                string   `json:"name" binding:"required"`
+	Description         string   `json:"description"`
+	AppType             string   `json:"app_type"`
+	ClientTemplate      string   `json:"client_template"`
+	Environment         string   `json:"environment"`
+	DomainGroup         string   `json:"domain_group"`
+	OwnerTeam           string   `json:"owner_team"`
+	Public              bool     `json:"public"`
+	PKCERequired        bool     `json:"pkce_required"`
+	Active              bool     `json:"active"`
+	LegacyPasswordGrant bool     `json:"legacy_password_grant"`
+	ApprovalStatus      string   `json:"approval_status"`
+	GrantTypes          []string `json:"grant_types"`
+	RedirectURIs        []string `json:"redirect_uris"`
+	Audiences           []string `json:"audiences"`
+	Channels            []string `json:"channels"`
+	TrustedTypes        []string `json:"trusted_types"`
+	Tags                []string `json:"tags"`
 }
 
 type UpdateClientReq = CreateClientReq
 
 type ClientResponse struct {
-	ID           uint      `json:"id"`
-	ClientID     string    `json:"client_id"`
-	ClientSecret string    `json:"client_secret"`
-	Name         string    `json:"name"`
-	Description  string    `json:"description"`
-	AppType      string    `json:"app_type"`
-	Public       bool      `json:"public"`
-	PKCERequired bool      `json:"pkce_required"`
-	Active       bool      `json:"active"`
-	GrantTypes   []string  `json:"grant_types"`
-	RedirectURIs []string  `json:"redirect_uris"`
-	Audiences    []string  `json:"audiences"`
-	Channels     []string  `json:"channels"`
-	TrustedTypes []string  `json:"trusted_types"`
-	CreatedAt    time.Time `json:"created_at"`
+	ID                  uint       `json:"id"`
+	ClientID            string     `json:"client_id"`
+	ClientSecret        string     `json:"client_secret"`
+	Name                string     `json:"name"`
+	Description         string     `json:"description"`
+	AppType             string     `json:"app_type"`
+	ClientTemplate      string     `json:"client_template"`
+	Environment         string     `json:"environment"`
+	DomainGroup         string     `json:"domain_group"`
+	OwnerTeam           string     `json:"owner_team"`
+	Public              bool       `json:"public"`
+	PKCERequired        bool       `json:"pkce_required"`
+	Active              bool       `json:"active"`
+	LegacyPasswordGrant bool       `json:"legacy_password_grant"`
+	ApprovalStatus      string     `json:"approval_status"`
+	GrantTypes          []string   `json:"grant_types"`
+	RedirectURIs        []string   `json:"redirect_uris"`
+	Audiences           []string   `json:"audiences"`
+	Channels            []string   `json:"channels"`
+	TrustedTypes        []string   `json:"trusted_types"`
+	Tags                []string   `json:"tags"`
+	SecretVersion       int        `json:"secret_version"`
+	SecretRotatedAt     *time.Time `json:"secret_rotated_at,omitempty"`
+	SecretExpiresAt     *time.Time `json:"secret_expires_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
 }
 
 type ClientUsecase struct {
-	repo domain.ClientRepository
+	repo        domain.ClientRepository
+	channelRepo domain.LoginChannelRepository
 }
 
-func NewClientUsecase(repo domain.ClientRepository) *ClientUsecase {
-	return &ClientUsecase{repo: repo}
+func NewClientUsecase(repo domain.ClientRepository, channelRepo domain.LoginChannelRepository) *ClientUsecase {
+	return &ClientUsecase{repo: repo, channelRepo: channelRepo}
 }
 
 func (uc *ClientUsecase) List(filters map[string]interface{}, page, pageSize int) (*PaginatedResult[ClientResponse], error) {
@@ -1281,21 +1312,32 @@ func (uc *ClientUsecase) List(filters map[string]interface{}, page, pageSize int
 
 func (uc *ClientUsecase) Create(req *CreateClientReq) (*ClientResponse, error) {
 	client := &domain.AuthClient{
-		ClientID:     strings.TrimSpace(req.ClientID),
-		ClientSecret: strings.TrimSpace(req.ClientSecret),
-		Name:         strings.TrimSpace(req.Name),
-		Description:  strings.TrimSpace(req.Description),
-		AppType:      strings.TrimSpace(req.AppType),
-		Public:       req.Public,
-		PKCERequired: req.PKCERequired,
-		Active:       req.Active,
-		GrantTypes:   cleanStringList(req.GrantTypes),
-		RedirectURIs: cleanStringList(req.RedirectURIs),
-		Audiences:    cleanStringList(req.Audiences),
-		Channels:     cleanStringList(req.Channels),
-		TrustedTypes: cleanStringList(req.TrustedTypes),
+		ClientID:            strings.TrimSpace(req.ClientID),
+		ClientSecret:        strings.TrimSpace(req.ClientSecret),
+		Name:                strings.TrimSpace(req.Name),
+		Description:         strings.TrimSpace(req.Description),
+		AppType:             strings.TrimSpace(req.AppType),
+		ClientTemplate:      strings.TrimSpace(req.ClientTemplate),
+		Environment:         strings.TrimSpace(req.Environment),
+		DomainGroup:         strings.TrimSpace(req.DomainGroup),
+		OwnerTeam:           strings.TrimSpace(req.OwnerTeam),
+		Public:              req.Public,
+		PKCERequired:        req.PKCERequired,
+		Active:              req.Active,
+		LegacyPasswordGrant: req.LegacyPasswordGrant,
+		ApprovalStatus:      strings.TrimSpace(req.ApprovalStatus),
+		GrantTypes:          cleanStringList(req.GrantTypes),
+		RedirectURIs:        cleanStringList(req.RedirectURIs),
+		Audiences:           cleanStringList(req.Audiences),
+		Channels:            cleanStringList(req.Channels),
+		TrustedTypes:        cleanStringList(req.TrustedTypes),
+		Tags:                cleanStringList(req.Tags),
 	}
+	applyClientTemplate(client)
 	normalizeClient(client)
+	if err := uc.validateClient(client); err != nil {
+		return nil, err
+	}
 	if err := uc.repo.Save(client); err != nil {
 		return nil, err
 	}
@@ -1313,15 +1355,26 @@ func (uc *ClientUsecase) Update(id uint, req *UpdateClientReq) (*ClientResponse,
 	client.Name = strings.TrimSpace(req.Name)
 	client.Description = strings.TrimSpace(req.Description)
 	client.AppType = strings.TrimSpace(req.AppType)
+	client.ClientTemplate = strings.TrimSpace(req.ClientTemplate)
+	client.Environment = strings.TrimSpace(req.Environment)
+	client.DomainGroup = strings.TrimSpace(req.DomainGroup)
+	client.OwnerTeam = strings.TrimSpace(req.OwnerTeam)
 	client.Public = req.Public
 	client.PKCERequired = req.PKCERequired
 	client.Active = req.Active
+	client.LegacyPasswordGrant = req.LegacyPasswordGrant
+	client.ApprovalStatus = strings.TrimSpace(req.ApprovalStatus)
 	client.GrantTypes = cleanStringList(req.GrantTypes)
 	client.RedirectURIs = cleanStringList(req.RedirectURIs)
 	client.Audiences = cleanStringList(req.Audiences)
 	client.Channels = cleanStringList(req.Channels)
 	client.TrustedTypes = cleanStringList(req.TrustedTypes)
+	client.Tags = cleanStringList(req.Tags)
+	applyClientTemplate(client)
 	normalizeClient(client)
+	if err := uc.validateClient(client); err != nil {
+		return nil, err
+	}
 	if err := uc.repo.Save(client); err != nil {
 		return nil, err
 	}
@@ -1331,6 +1384,27 @@ func (uc *ClientUsecase) Update(id uint, req *UpdateClientReq) (*ClientResponse,
 
 func (uc *ClientUsecase) Delete(id uint) error {
 	return uc.repo.Delete(id)
+}
+
+func (uc *ClientUsecase) RotateSecret(id uint) (*ClientResponse, error) {
+	client, err := uc.findByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if client.Public {
+		return nil, errors.New("public client không dùng client_secret rotation")
+	}
+	now := time.Now()
+	client.ClientSecret = generateOpaqueID(32)
+	client.SecretVersion++
+	client.SecretRotatedAt = &now
+	expiry := now.Add(180 * 24 * time.Hour)
+	client.SecretExpiresAt = &expiry
+	if err := uc.repo.Save(client); err != nil {
+		return nil, err
+	}
+	resp := clientToResponse(client)
+	return &resp, nil
 }
 
 func (uc *ClientUsecase) findByID(id uint) (*domain.AuthClient, error) {
@@ -2019,21 +2093,207 @@ func cleanStringList(values []string) []string {
 }
 
 func normalizeClient(client *domain.AuthClient) {
+	if client.ClientTemplate == "" {
+		client.ClientTemplate = "custom"
+	}
 	if client.AppType == "" {
 		client.AppType = "web_app"
 	}
+	if client.Environment == "" {
+		client.Environment = "prod"
+	}
+	if client.DomainGroup == "" {
+		client.DomainGroup = "core"
+	}
+	if client.ApprovalStatus == "" {
+		client.ApprovalStatus = "approved"
+	}
 	if len(client.GrantTypes) == 0 {
-		client.GrantTypes = []string{"password", "refresh_token"}
+		if client.AppType == "internal_service" {
+			client.GrantTypes = []string{"client_credentials"}
+		} else {
+			client.GrantTypes = []string{"refresh_token", "authorization_code"}
+		}
 	}
 	if len(client.Channels) == 0 {
-		client.Channels = []string{"web"}
+		switch client.AppType {
+		case "mobile_app":
+			client.Channels = []string{"mobile"}
+		case "internal_service":
+			client.Channels = []string{"service"}
+		case "partner_api":
+			client.Channels = []string{"partner"}
+		case "kiosk":
+			client.Channels = []string{"kiosk"}
+		case "admin_portal":
+			client.Channels = []string{"crm"}
+		default:
+			client.Channels = []string{"web"}
+		}
 	}
 	if len(client.Audiences) == 0 {
 		client.Audiences = []string{"default-api"}
 	}
-	if !client.Public && client.ClientSecret == "" {
-		client.ClientSecret = generateOpaqueID(16)
+	if client.Public {
+		client.ClientSecret = ""
+		if containsOrEmpty(client.GrantTypes, "authorization_code") {
+			client.PKCERequired = true
+		}
 	}
+	if !client.Public && client.ClientSecret == "" {
+		client.ClientSecret = generateOpaqueID(32)
+	}
+	if client.SecretVersion <= 0 {
+		client.SecretVersion = 1
+	}
+	if !client.Public && client.SecretExpiresAt == nil {
+		expiry := time.Now().Add(180 * 24 * time.Hour)
+		client.SecretExpiresAt = &expiry
+	}
+}
+
+func applyClientTemplate(client *domain.AuthClient) {
+	switch strings.TrimSpace(client.ClientTemplate) {
+	case "spa_web":
+		if client.AppType == "" {
+			client.AppType = "web_app"
+		}
+		if len(client.Channels) == 0 {
+			client.Channels = []string{"web"}
+		}
+		if len(client.GrantTypes) == 0 {
+			client.GrantTypes = []string{"authorization_code", "refresh_token"}
+		}
+		if len(client.TrustedTypes) == 0 {
+			client.TrustedTypes = []string{"browser"}
+		}
+		client.Public = true
+		client.PKCERequired = true
+	case "crm_portal":
+		if client.AppType == "" {
+			client.AppType = "admin_portal"
+		}
+		if len(client.Channels) == 0 {
+			client.Channels = []string{"crm", "web"}
+		}
+		if len(client.GrantTypes) == 0 {
+			client.GrantTypes = []string{"authorization_code", "refresh_token"}
+		}
+		if len(client.TrustedTypes) == 0 {
+			client.TrustedTypes = []string{"browser", "desktop"}
+		}
+		client.Public = false
+	case "mobile_pkce":
+		if client.AppType == "" {
+			client.AppType = "mobile_app"
+		}
+		if len(client.Channels) == 0 {
+			client.Channels = []string{"mobile"}
+		}
+		if len(client.GrantTypes) == 0 {
+			client.GrantTypes = []string{"authorization_code", "refresh_token"}
+		}
+		if len(client.TrustedTypes) == 0 {
+			client.TrustedTypes = []string{"mobile"}
+		}
+		client.Public = true
+		client.PKCERequired = true
+	case "kiosk_public":
+		if client.AppType == "" {
+			client.AppType = "kiosk"
+		}
+		if len(client.Channels) == 0 {
+			client.Channels = []string{"kiosk"}
+		}
+		if len(client.GrantTypes) == 0 {
+			client.GrantTypes = []string{"authorization_code", "refresh_token"}
+		}
+		if len(client.TrustedTypes) == 0 {
+			client.TrustedTypes = []string{"browser", "device"}
+		}
+		client.Public = true
+		client.PKCERequired = true
+	case "service_m2m":
+		if client.AppType == "" {
+			client.AppType = "internal_service"
+		}
+		if len(client.Channels) == 0 {
+			client.Channels = []string{"service"}
+		}
+		if len(client.GrantTypes) == 0 {
+			client.GrantTypes = []string{"client_credentials"}
+		}
+		if len(client.TrustedTypes) == 0 {
+			client.TrustedTypes = []string{"server"}
+		}
+		client.Public = false
+		client.PKCERequired = false
+	case "partner_oidc":
+		if client.AppType == "" {
+			client.AppType = "partner_api"
+		}
+		if len(client.Channels) == 0 {
+			client.Channels = []string{"partner"}
+		}
+		if len(client.GrantTypes) == 0 {
+			client.GrantTypes = []string{"authorization_code", "refresh_token"}
+		}
+		if len(client.TrustedTypes) == 0 {
+			client.TrustedTypes = []string{"browser", "server"}
+		}
+		client.Public = false
+	case "custom":
+	}
+}
+
+func (uc *ClientUsecase) validateClient(client *domain.AuthClient) error {
+	if client.ClientID == "" {
+		return errors.New("client_id là bắt buộc")
+	}
+	if !regexp.MustCompile(`^[a-z0-9._-]+$`).MatchString(client.ClientID) {
+		return errors.New("client_id chỉ được chứa chữ thường, số, dấu chấm, gạch ngang hoặc gạch dưới")
+	}
+	if client.Public && client.ClientSecret != "" {
+		return errors.New("public client không được cấu hình client_secret")
+	}
+	if containsOrEmpty(client.GrantTypes, "password") && !client.LegacyPasswordGrant {
+		return errors.New("password grant chỉ được phép cho legacy client đã bật cờ legacy_password_grant")
+	}
+	if containsOrEmpty(client.GrantTypes, "authorization_code") {
+		if len(client.RedirectURIs) == 0 {
+			return errors.New("authorization_code yêu cầu ít nhất một redirect_uri")
+		}
+		if client.Public && !client.PKCERequired {
+			return errors.New("public client dùng authorization_code bắt buộc phải bật PKCE")
+		}
+	}
+	if containsOrEmpty(client.GrantTypes, "client_credentials") && client.Public {
+		return errors.New("public client không được phép dùng client_credentials")
+	}
+	if len(client.Channels) == 0 {
+		return errors.New("client phải được gán ít nhất một login channel")
+	}
+	if uc.channelRepo != nil {
+		for _, channelCode := range client.Channels {
+			channel, err := uc.channelRepo.FindByCode(channelCode)
+			if err != nil {
+				return fmt.Errorf("login channel %s không tồn tại", channelCode)
+			}
+			if !channel.Active {
+				return fmt.Errorf("login channel %s đang bị vô hiệu hóa", channelCode)
+			}
+			if containsOrEmpty(client.GrantTypes, "password") && !channel.AllowPassword {
+				return fmt.Errorf("login channel %s không cho phép password grant", channelCode)
+			}
+			if containsOrEmpty(client.GrantTypes, "authorization_code") && !channel.AllowSSO {
+				return fmt.Errorf("login channel %s không cho phép authorization_code / SSO flow", channelCode)
+			}
+		}
+	}
+	if client.ApprovalStatus != "approved" && containsOrEmpty(client.GrantTypes, "client_credentials") {
+		return errors.New("service client phải được approved trước khi dùng client_credentials")
+	}
+	return nil
 }
 
 func normalizeSSOProvider(provider *domain.SSOProvider) {
@@ -2062,21 +2322,31 @@ func normalizeLoginChannel(channel *domain.LoginChannel) {
 
 func clientToResponse(client *domain.AuthClient) ClientResponse {
 	return ClientResponse{
-		ID:           client.ID,
-		ClientID:     client.ClientID,
-		ClientSecret: client.ClientSecret,
-		Name:         client.Name,
-		Description:  client.Description,
-		AppType:      client.AppType,
-		Public:       client.Public,
-		PKCERequired: client.PKCERequired,
-		Active:       client.Active,
-		GrantTypes:   cloneStrings(client.GrantTypes),
-		RedirectURIs: cloneStrings(client.RedirectURIs),
-		Audiences:    cloneStrings(client.Audiences),
-		Channels:     cloneStrings(client.Channels),
-		TrustedTypes: cloneStrings(client.TrustedTypes),
-		CreatedAt:    client.CreatedAt,
+		ID:                  client.ID,
+		ClientID:            client.ClientID,
+		ClientSecret:        client.ClientSecret,
+		Name:                client.Name,
+		Description:         client.Description,
+		AppType:             client.AppType,
+		ClientTemplate:      client.ClientTemplate,
+		Environment:         client.Environment,
+		DomainGroup:         client.DomainGroup,
+		OwnerTeam:           client.OwnerTeam,
+		Public:              client.Public,
+		PKCERequired:        client.PKCERequired,
+		Active:              client.Active,
+		LegacyPasswordGrant: client.LegacyPasswordGrant,
+		ApprovalStatus:      client.ApprovalStatus,
+		GrantTypes:          cloneStrings(client.GrantTypes),
+		RedirectURIs:        cloneStrings(client.RedirectURIs),
+		Audiences:           cloneStrings(client.Audiences),
+		Channels:            cloneStrings(client.Channels),
+		TrustedTypes:        cloneStrings(client.TrustedTypes),
+		Tags:                cloneStrings(client.Tags),
+		SecretVersion:       client.SecretVersion,
+		SecretRotatedAt:     client.SecretRotatedAt,
+		SecretExpiresAt:     client.SecretExpiresAt,
+		CreatedAt:           client.CreatedAt,
 	}
 }
 
@@ -2348,6 +2618,9 @@ func (uc *AuthUsecase) validateClientAccess(user *domain.User, req *LoginRequest
 	if err != nil || !client.Active {
 		return nil, nil, "", "", errors.New("client_id không hợp lệ hoặc chưa được đăng ký")
 	}
+	if client.ApprovalStatus != "" && client.ApprovalStatus != "approved" {
+		return nil, nil, "", "", errors.New("client chưa được approval")
+	}
 	grantType := strings.TrimSpace(req.GrantType)
 	if grantType == "" {
 		grantType = "password"
@@ -2355,8 +2628,14 @@ func (uc *AuthUsecase) validateClientAccess(user *domain.User, req *LoginRequest
 	if !containsOrEmpty(client.GrantTypes, grantType) {
 		return nil, nil, "", "", errors.New("grant_type không được hỗ trợ cho client này")
 	}
+	if grantType == "password" && !client.LegacyPasswordGrant {
+		return nil, nil, "", "", errors.New("password grant chỉ còn hỗ trợ cho legacy client")
+	}
 	if !client.Public && strings.TrimSpace(req.ClientSecret) != client.ClientSecret {
 		return nil, nil, "", "", errors.New("client_secret không hợp lệ")
+	}
+	if !client.Public && client.SecretExpiresAt != nil && client.SecretExpiresAt.Before(time.Now()) {
+		return nil, nil, "", "", errors.New("client_secret đã hết hạn, cần rotate secret")
 	}
 	channel := strings.TrimSpace(req.Channel)
 	if channel == "" && len(client.Channels) > 0 {

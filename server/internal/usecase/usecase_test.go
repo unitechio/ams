@@ -192,39 +192,47 @@ type testLoginChannelRepo struct {
 func newTestClientRepo() *testClientRepo {
 	return &testClientRepo{clients: map[string]*domain.AuthClient{
 		"web_portal": {
-			ID:           1,
-			ClientID:     "web_portal",
-			Name:         "Web Portal",
-			Active:       true,
-			Public:       true,
-			PKCERequired: true,
-			GrantTypes:   []string{"password", "refresh_token", "authorization_code"},
-			RedirectURIs: []string{"http://localhost:5173/oauth/callback"},
-			Channels:     []string{"web"},
-			Audiences:    []string{"web-api"},
+			ID:                  1,
+			ClientID:            "web_portal",
+			Name:                "Web Portal",
+			Active:              true,
+			Public:              true,
+			PKCERequired:        true,
+			LegacyPasswordGrant: true,
+			ApprovalStatus:      "approved",
+			GrantTypes:          []string{"password", "refresh_token", "authorization_code"},
+			RedirectURIs:        []string{"http://localhost:5173/oauth/callback"},
+			Channels:            []string{"web"},
+			Audiences:           []string{"web-api"},
+			SecretVersion:       1,
 		},
 		"payment_service": {
-			ID:           2,
-			ClientID:     "payment_service",
-			ClientSecret: "payment_service_secret",
-			Name:         "Payment Service",
-			Active:       true,
-			Public:       false,
-			GrantTypes:   []string{"client_credentials"},
-			Channels:     []string{"service"},
-			Audiences:    []string{"payment-api"},
+			ID:             2,
+			ClientID:       "payment_service",
+			ClientSecret:   "payment_service_secret",
+			Name:           "Payment Service",
+			Active:         true,
+			Public:         false,
+			ApprovalStatus: "approved",
+			GrantTypes:     []string{"client_credentials"},
+			Channels:       []string{"service"},
+			Audiences:      []string{"payment-api"},
+			SecretVersion:  1,
 		},
 		"crm_portal": {
-			ID:           3,
-			ClientID:     "crm_portal",
-			ClientSecret: "crm_portal_secret",
-			Name:         "CRM Portal",
-			Active:       true,
-			Public:       false,
-			GrantTypes:   []string{"password", "refresh_token", "authorization_code"},
-			RedirectURIs: []string{"http://localhost:5173/sso/callback/crm"},
-			Channels:     []string{"crm", "web"},
-			Audiences:    []string{"crm-api"},
+			ID:                  3,
+			ClientID:            "crm_portal",
+			ClientSecret:        "crm_portal_secret",
+			Name:                "CRM Portal",
+			Active:              true,
+			Public:              false,
+			LegacyPasswordGrant: true,
+			ApprovalStatus:      "approved",
+			GrantTypes:          []string{"password", "refresh_token", "authorization_code"},
+			RedirectURIs:        []string{"http://localhost:5173/sso/callback/crm"},
+			Channels:            []string{"crm", "web"},
+			Audiences:           []string{"crm-api"},
+			SecretVersion:       1,
 		},
 	}}
 }
@@ -797,5 +805,56 @@ func TestLoginRequiresOTPWhenChannelPolicyRequiresMFA(t *testing.T) {
 	})
 	if !errors.Is(err, ErrOTPRequired) {
 		t.Fatalf("expected channel MFA to require OTP, got %v", err)
+	}
+}
+
+func TestCreateClientRejectsPasswordGrantWithoutLegacyFlag(t *testing.T) {
+	uc := NewClientUsecase(newTestClientRepo(), newTestLoginChannelRepo())
+
+	_, err := uc.Create(&CreateClientReq{
+		ClientID:     "tenant.web.prod",
+		Name:         "Tenant Web",
+		AppType:      "web_app",
+		Public:       true,
+		GrantTypes:   []string{"password", "refresh_token"},
+		Channels:     []string{"web"},
+		RedirectURIs: []string{"https://tenant.app/callback"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "legacy_password_grant") {
+		t.Fatalf("expected legacy password grant validation error, got %v", err)
+	}
+}
+
+func TestCreateClientRejectsUnknownChannel(t *testing.T) {
+	uc := NewClientUsecase(newTestClientRepo(), newTestLoginChannelRepo())
+
+	_, err := uc.Create(&CreateClientReq{
+		ClientID:       "tenant.partner.prod",
+		Name:           "Partner",
+		AppType:        "partner_api",
+		Public:         false,
+		ApprovalStatus: "approved",
+		GrantTypes:     []string{"authorization_code", "refresh_token"},
+		Channels:       []string{"unknown"},
+		RedirectURIs:   []string{"https://partner.app/callback"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "không tồn tại") {
+		t.Fatalf("expected unknown channel validation error, got %v", err)
+	}
+}
+
+func TestRotateSecretIncrementsVersion(t *testing.T) {
+	repo := newTestClientRepo()
+	uc := NewClientUsecase(repo, newTestLoginChannelRepo())
+
+	resp, err := uc.RotateSecret(3)
+	if err != nil {
+		t.Fatalf("rotate secret failed: %v", err)
+	}
+	if resp.SecretVersion != 2 {
+		t.Fatalf("expected secret version 2, got %d", resp.SecretVersion)
+	}
+	if resp.ClientSecret == "" || resp.ClientSecret == "crm_portal_secret" {
+		t.Fatalf("expected rotated secret to be regenerated")
 	}
 }

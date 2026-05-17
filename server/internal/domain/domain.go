@@ -42,22 +42,32 @@ type User struct {
 }
 
 type AuthClient struct {
-	ID           uint
-	ClientID     string
-	ClientSecret string
-	Name         string
-	Description  string
-	AppType      string
-	Public       bool
-	PKCERequired bool
-	Active       bool
-	GrantTypes   []string
-	RedirectURIs []string
-	Audiences    []string
-	Channels     []string
-	TrustedTypes []string
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID                  uint
+	ClientID            string
+	ClientSecret        string
+	Name                string
+	Description         string
+	AppType             string
+	ClientTemplate      string
+	Environment         string
+	DomainGroup         string
+	OwnerTeam           string
+	Public              bool
+	PKCERequired        bool
+	Active              bool
+	LegacyPasswordGrant bool
+	ApprovalStatus      string
+	GrantTypes          []string
+	RedirectURIs        []string
+	Audiences           []string
+	Channels            []string
+	TrustedTypes        []string
+	Tags                []string
+	SecretVersion       int
+	SecretRotatedAt     *time.Time
+	SecretExpiresAt     *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type SSOProvider struct {

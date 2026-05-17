@@ -130,22 +130,32 @@ type GormRefreshToken struct {
 func (GormRefreshToken) TableName() string { return "sys_refresh_tokens" }
 
 type GormAuthClient struct {
-	ID               uint   `gorm:"primaryKey;autoIncrement"`
-	ClientID         string `gorm:"uniqueIndex;size:150;not null"`
-	ClientSecret     string `gorm:"size:255;default:''"`
-	Name             string `gorm:"size:200;not null"`
-	Description      string `gorm:"size:500;default:''"`
-	AppType          string `gorm:"size:50;not null;default:'web_app'"`
-	Public           bool   `gorm:"default:true"`
-	PKCERequired     bool   `gorm:"default:false"`
-	Active           bool   `gorm:"default:true"`
-	GrantTypesJSON   string `gorm:"type:text;default:'[]'"`
-	RedirectURIsJSON string `gorm:"type:text;default:'[]'"`
-	AudiencesJSON    string `gorm:"type:text;default:'[]'"`
-	ChannelsJSON     string `gorm:"type:text;default:'[]'"`
-	TrustedTypesJSON string `gorm:"type:text;default:'[]'"`
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                  uint   `gorm:"primaryKey;autoIncrement"`
+	ClientID            string `gorm:"uniqueIndex;size:150;not null"`
+	ClientSecret        string `gorm:"size:255;default:''"`
+	Name                string `gorm:"size:200;not null"`
+	Description         string `gorm:"size:500;default:''"`
+	AppType             string `gorm:"size:50;not null;default:'web_app'"`
+	ClientTemplate      string `gorm:"size:50;default:'custom'"`
+	Environment         string `gorm:"size:30;default:'prod'"`
+	DomainGroup         string `gorm:"size:100;default:'core'"`
+	OwnerTeam           string `gorm:"size:120;default:''"`
+	Public              bool   `gorm:"default:true"`
+	PKCERequired        bool   `gorm:"default:false"`
+	Active              bool   `gorm:"default:true"`
+	LegacyPasswordGrant bool   `gorm:"default:false"`
+	ApprovalStatus      string `gorm:"size:30;default:'approved'"`
+	GrantTypesJSON      string `gorm:"type:text;default:'[]'"`
+	RedirectURIsJSON    string `gorm:"type:text;default:'[]'"`
+	AudiencesJSON       string `gorm:"type:text;default:'[]'"`
+	ChannelsJSON        string `gorm:"type:text;default:'[]'"`
+	TrustedTypesJSON    string `gorm:"type:text;default:'[]'"`
+	TagsJSON            string `gorm:"type:text;default:'[]'"`
+	SecretVersion       int    `gorm:"default:1"`
+	SecretRotatedAt     *time.Time
+	SecretExpiresAt     *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 func (GormAuthClient) TableName() string { return "sys_auth_clients" }
