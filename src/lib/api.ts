@@ -340,9 +340,11 @@ export interface SecurityPolicy {
   scope_type: string;
   target_client: string;
   target_channel: string;
+  target_action: string;
   priority: number;
   active: boolean;
   config: {
+    require_step_up?: boolean;
     require_mfa?: boolean;
     allow_password?: boolean;
     allow_sso?: boolean;

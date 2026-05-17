@@ -209,6 +209,7 @@ type GormSecurityPolicy struct {
 	ScopeType     string `gorm:"size:50;not null;default:'global'"`
 	TargetClient  string `gorm:"size:150;default:''"`
 	TargetChannel string `gorm:"size:100;default:''"`
+	TargetAction  string `gorm:"size:150;default:''"`
 	Priority      int    `gorm:"default:100"`
 	Active        bool   `gorm:"default:true"`
 	ConfigJSON    string `gorm:"type:text;default:'{}'"`

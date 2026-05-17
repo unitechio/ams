@@ -86,6 +86,7 @@ func main() {
 		jwtSvc,
 		permLoader,
 		auditRepo,
+		securityPolicyRepo,
 		authHandler,
 		userHandler,
 		clientHandler,

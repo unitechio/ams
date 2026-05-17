@@ -115,6 +115,7 @@ type SecurityPolicy struct {
 	ScopeType     string
 	TargetClient  string
 	TargetChannel string
+	TargetAction  string
 	Priority      int
 	Active        bool
 	ConfigJSON    string

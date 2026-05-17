@@ -1039,8 +1039,11 @@ func (r *GormSecurityPolicyRepository) List(filters map[string]interface{}) ([]*
 	q := r.db.Model(&GormSecurityPolicy{})
 	if search, ok := filters["search"].(string); ok && strings.TrimSpace(search) != "" {
 		like := "%" + strings.TrimSpace(search) + "%"
-		q = q.Where("code ILIKE ? OR name ILIKE ? OR policy_type ILIKE ? OR scope_type ILIKE ? OR target_client ILIKE ? OR target_channel ILIKE ?",
-			like, like, like, like, like, like)
+		q = q.Where("code ILIKE ? OR name ILIKE ? OR policy_type ILIKE ? OR scope_type ILIKE ? OR target_client ILIKE ? OR target_channel ILIKE ? OR target_action ILIKE ?",
+			like, like, like, like, like, like, like)
+	}
+	if targetAction, ok := filters["target_action"].(string); ok && strings.TrimSpace(targetAction) != "" {
+		q = q.Where("target_action = ?", strings.TrimSpace(targetAction))
 	}
 	if policyType, ok := filters["policy_type"].(string); ok && strings.TrimSpace(policyType) != "" {
 		q = q.Where("policy_type = ?", strings.TrimSpace(policyType))
@@ -1101,6 +1104,7 @@ func gormToSecurityPolicy(model *GormSecurityPolicy) *domain.SecurityPolicy {
 		ScopeType:     model.ScopeType,
 		TargetClient:  model.TargetClient,
 		TargetChannel: model.TargetChannel,
+		TargetAction:  model.TargetAction,
 		Priority:      model.Priority,
 		Active:        model.Active,
 		ConfigJSON:    model.ConfigJSON,
@@ -1119,6 +1123,7 @@ func securityPolicyToGorm(policy *domain.SecurityPolicy) *GormSecurityPolicy {
 		ScopeType:     policy.ScopeType,
 		TargetClient:  policy.TargetClient,
 		TargetChannel: policy.TargetChannel,
+		TargetAction:  policy.TargetAction,
 		Priority:      policy.Priority,
 		Active:        policy.Active,
 		ConfigJSON:    policy.ConfigJSON,

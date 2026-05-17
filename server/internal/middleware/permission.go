@@ -3,7 +3,9 @@
 package middleware
 
 import (
+	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -19,6 +21,10 @@ import (
 // Injected to keep middleware decoupled from concrete repositories.
 type PermissionLoader interface {
 	LoadForUser(userID uint) ([]*domain.RolePermission, error)
+}
+
+type StepUpPolicyRepository interface {
+	List(filters map[string]interface{}) ([]*domain.SecurityPolicy, int64, error)
 }
 
 // ─── Auth Middleware ──────────────────────────────────────────────────────────
@@ -224,6 +230,84 @@ func RequireStepUp(jwtSvc *jwtpkg.Service) gin.HandlerFunc {
 			return
 		}
 		c.Next()
+	}
+}
+
+func RequirePolicyStepUp(jwtSvc *jwtpkg.Service, repo StepUpPolicyRepository, action string, fallbackRequired bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		required := fallbackRequired
+		if repo != nil {
+			if decision, ok := resolveStepUpRequirement(repo, GetClientID(c), action); ok {
+				required = decision
+			}
+		}
+		if !required {
+			c.Next()
+			return
+		}
+		RequireStepUp(jwtSvc)(c)
+	}
+}
+
+type stepUpPolicyConfig struct {
+	RequireStepUp *bool `json:"require_step_up,omitempty"`
+}
+
+func resolveStepUpRequirement(repo StepUpPolicyRepository, clientID, action string) (bool, bool) {
+	items, _, err := repo.List(map[string]interface{}{
+		"policy_type":   "step_up",
+		"target_action": action,
+		"active":        "true",
+		"page":          1,
+		"page_size":     500,
+	})
+	if err != nil || len(items) == 0 {
+		return false, false
+	}
+	applicable := make([]*domain.SecurityPolicy, 0, len(items))
+	for _, item := range items {
+		if stepUpApplies(item, clientID, action) {
+			applicable = append(applicable, item)
+		}
+	}
+	if len(applicable) == 0 {
+		return false, false
+	}
+	sort.SliceStable(applicable, func(i, j int) bool {
+		if applicable[i].Priority == applicable[j].Priority {
+			return stepUpSpecificity(applicable[i]) > stepUpSpecificity(applicable[j])
+		}
+		return applicable[i].Priority < applicable[j].Priority
+	})
+	cfg := stepUpPolicyConfig{}
+	if err := json.Unmarshal([]byte(applicable[0].ConfigJSON), &cfg); err != nil || cfg.RequireStepUp == nil {
+		return false, false
+	}
+	return *cfg.RequireStepUp, true
+}
+
+func stepUpApplies(item *domain.SecurityPolicy, clientID, action string) bool {
+	if strings.TrimSpace(item.TargetAction) != "" && !strings.EqualFold(strings.TrimSpace(item.TargetAction), strings.TrimSpace(action)) {
+		return false
+	}
+	switch strings.TrimSpace(item.ScopeType) {
+	case "", "global":
+		return true
+	case "client":
+		return strings.EqualFold(strings.TrimSpace(item.TargetClient), strings.TrimSpace(clientID))
+	default:
+		return false
+	}
+}
+
+func stepUpSpecificity(item *domain.SecurityPolicy) int {
+	switch strings.TrimSpace(item.ScopeType) {
+	case "client":
+		return 2
+	case "global", "":
+		return 1
+	default:
+		return 0
 	}
 }
 

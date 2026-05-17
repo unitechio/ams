@@ -21,9 +21,11 @@ const DEFAULT_FORM = {
   scope_type: 'global',
   target_client: '',
   target_channel: '',
+  target_action: '',
   priority: 100,
   active: true,
   config: {
+    require_step_up: true,
     require_mfa: false,
     allow_password: true,
     allow_sso: true,
@@ -108,9 +110,11 @@ export default function SecurityPoliciesPage() {
       scope_type: policy.scope_type,
       target_client: policy.target_client,
       target_channel: policy.target_channel,
+      target_action: policy.target_action,
       priority: policy.priority,
       active: policy.active,
       config: {
+        require_step_up: policy.config.require_step_up ?? true,
         require_mfa: policy.config.require_mfa ?? false,
         allow_password: policy.config.allow_password ?? true,
         allow_sso: policy.config.allow_sso ?? true,
@@ -144,6 +148,7 @@ export default function SecurityPoliciesPage() {
         description: form.description.trim(),
         target_client: form.target_client,
         target_channel: form.target_channel,
+        target_action: form.target_action,
       };
       if (editing) {
         await securityPoliciesApi.update(editing.id, payload);
@@ -163,6 +168,7 @@ export default function SecurityPoliciesPage() {
 
   const rows = result?.data || [];
   const isAuthPolicy = form.policy_type === 'auth';
+  const isStepUpPolicy = form.policy_type === 'step_up';
 
   return (
     <div className="space-y-6">
@@ -195,6 +201,7 @@ export default function SecurityPoliciesPage() {
                 <SelectContent>
                   <SelectItem value="auth">Auth</SelectItem>
                   <SelectItem value="password">Password</SelectItem>
+                  <SelectItem value="step_up">Step-up Action</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -211,6 +218,20 @@ export default function SecurityPoliciesPage() {
               </Select>
             </div>
             <div className="md:col-span-2"><Label>Description</Label><Input value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} /></div>
+            {isStepUpPolicy && (
+              <div className="md:col-span-2">
+                <Label>Target Action</Label>
+                <Select value={form.target_action || undefined} onValueChange={(value) => setForm(f => ({ ...f, target_action: value }))}>
+                  <SelectTrigger><SelectValue placeholder="Chọn action nhạy cảm" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="client.rotate_secret">client.rotate_secret</SelectItem>
+                    <SelectItem value="policy.update">policy.update</SelectItem>
+                    <SelectItem value="device.revoke">device.revoke</SelectItem>
+                    <SelectItem value="user.reset_password">user.reset_password</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {(form.scope_type === 'client' || form.scope_type === 'client_channel') && (
               <div>
                 <Label>Target Client</Label>
@@ -260,6 +281,13 @@ export default function SecurityPoliciesPage() {
                 <div><Label>Identity Max Attempts</Label><Input type="number" value={form.config.login_identity_max_attempts} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_identity_max_attempts: Number(e.target.value || 0) } }))} /></div>
                 <div><Label>Identity Window (minutes)</Label><Input type="number" value={form.config.login_identity_window_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_identity_window_minutes: Number(e.target.value || 0) } }))} /></div>
                 <div><Label>Identity Block (minutes)</Label><Input type="number" value={form.config.login_identity_block_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_identity_block_minutes: Number(e.target.value || 0) } }))} /></div>
+              </>
+            ) : isStepUpPolicy ? (
+              <>
+                <div className="flex items-center gap-4 rounded-xl border border-slate-200 px-4 py-3 text-sm">
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={form.config.require_step_up} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, require_step_up: e.target.checked } }))} /> Require step-up for action</label>
+                </div>
+                <div className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500">Áp dụng theo action nhạy cảm cụ thể thay vì hard-code toàn bộ route.</div>
               </>
             ) : (
               <>
@@ -338,6 +366,11 @@ export default function SecurityPoliciesPage() {
                           <>
                             <div>{policy.config.require_mfa ? 'Require MFA' : 'MFA inherit/default'}</div>
                             <div className="text-slate-400">Pwd: {String(policy.config.allow_password ?? true)} • SSO: {String(policy.config.allow_sso ?? true)} • Refresh: {policy.config.refresh_ttl_minutes ?? 10080}m</div>
+                          </>
+                        ) : policy.policy_type === 'step_up' ? (
+                          <>
+                            <div>Action: {policy.target_action || 'N/A'}</div>
+                            <div className="text-slate-400">Require step-up: {String(policy.config.require_step_up ?? true)}</div>
                           </>
                         ) : (
                           <>

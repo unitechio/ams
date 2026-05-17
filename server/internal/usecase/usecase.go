@@ -194,6 +194,7 @@ type sessionContext struct {
 }
 
 type securityPolicyConfig struct {
+	RequireStepUp         *bool `json:"require_step_up,omitempty"`
 	RequireMFA            *bool `json:"require_mfa,omitempty"`
 	AllowPassword         *bool `json:"allow_password,omitempty"`
 	AllowSSO              *bool `json:"allow_sso,omitempty"`
@@ -1739,6 +1740,7 @@ func (uc *LoginChannelUsecase) findByID(id uint) (*domain.LoginChannel, error) {
 }
 
 type SecurityPolicyRulePayload struct {
+	RequireStepUp         *bool `json:"require_step_up,omitempty"`
 	RequireMFA            *bool `json:"require_mfa,omitempty"`
 	AllowPassword         *bool `json:"allow_password,omitempty"`
 	AllowSSO              *bool `json:"allow_sso,omitempty"`
@@ -1767,6 +1769,7 @@ type CreateSecurityPolicyReq struct {
 	ScopeType     string                    `json:"scope_type"`
 	TargetClient  string                    `json:"target_client"`
 	TargetChannel string                    `json:"target_channel"`
+	TargetAction  string                    `json:"target_action"`
 	Priority      int                       `json:"priority"`
 	Active        bool                      `json:"active"`
 	Config        SecurityPolicyRulePayload `json:"config"`
@@ -1783,6 +1786,7 @@ type SecurityPolicyResponse struct {
 	ScopeType     string                    `json:"scope_type"`
 	TargetClient  string                    `json:"target_client"`
 	TargetChannel string                    `json:"target_channel"`
+	TargetAction  string                    `json:"target_action"`
 	Priority      int                       `json:"priority"`
 	Active        bool                      `json:"active"`
 	Config        SecurityPolicyRulePayload `json:"config"`
@@ -1825,6 +1829,7 @@ func (uc *SecurityPolicyUsecase) Create(req *CreateSecurityPolicyReq) (*Security
 		ScopeType:     strings.TrimSpace(req.ScopeType),
 		TargetClient:  strings.TrimSpace(req.TargetClient),
 		TargetChannel: strings.TrimSpace(req.TargetChannel),
+		TargetAction:  strings.TrimSpace(req.TargetAction),
 		Priority:      req.Priority,
 		Active:        req.Active,
 		ConfigJSON:    configJSON,
@@ -1856,6 +1861,7 @@ func (uc *SecurityPolicyUsecase) Update(id uint, req *UpdateSecurityPolicyReq) (
 	policy.ScopeType = strings.TrimSpace(req.ScopeType)
 	policy.TargetClient = strings.TrimSpace(req.TargetClient)
 	policy.TargetChannel = strings.TrimSpace(req.TargetChannel)
+	policy.TargetAction = strings.TrimSpace(req.TargetAction)
 	policy.Priority = req.Priority
 	policy.Active = req.Active
 	policy.ConfigJSON = configJSON
@@ -2367,6 +2373,20 @@ func policyApplies(item *domain.SecurityPolicy, clientID, channel string) bool {
 	}
 }
 
+func stepUpPolicyApplies(item *domain.SecurityPolicy, clientID, action string) bool {
+	if strings.TrimSpace(item.TargetAction) != "" && !strings.EqualFold(strings.TrimSpace(item.TargetAction), strings.TrimSpace(action)) {
+		return false
+	}
+	switch strings.TrimSpace(item.ScopeType) {
+	case "", "global":
+		return true
+	case "client":
+		return strings.EqualFold(strings.TrimSpace(item.TargetClient), strings.TrimSpace(clientID))
+	default:
+		return false
+	}
+}
+
 func policySpecificity(item *domain.SecurityPolicy) int {
 	switch strings.TrimSpace(item.ScopeType) {
 	case "global":
@@ -2397,6 +2417,9 @@ func mergeSecurityPolicyConfig(base, next *securityPolicyConfig) {
 	}
 	if next.RequireMFA != nil {
 		base.RequireMFA = next.RequireMFA
+	}
+	if next.RequireStepUp != nil {
+		base.RequireStepUp = next.RequireStepUp
 	}
 	if next.AllowPassword != nil {
 		base.AllowPassword = next.AllowPassword
@@ -2784,7 +2807,7 @@ func normalizeSecurityPolicy(policy *domain.SecurityPolicy) {
 
 func validateSecurityPolicyDefinition(policy *domain.SecurityPolicy) error {
 	switch policy.PolicyType {
-	case "auth", "password":
+	case "auth", "password", "step_up":
 	default:
 		return errors.New("policy_type không hợp lệ")
 	}
@@ -2804,6 +2827,9 @@ func validateSecurityPolicyDefinition(policy *domain.SecurityPolicy) error {
 		}
 	default:
 		return errors.New("scope_type không hợp lệ")
+	}
+	if policy.PolicyType == "step_up" && strings.TrimSpace(policy.TargetAction) == "" {
+		return errors.New("step_up policy yêu cầu target_action")
 	}
 	return nil
 }
@@ -2895,9 +2921,11 @@ func securityPolicyToResponse(policy *domain.SecurityPolicy) SecurityPolicyRespo
 		ScopeType:     policy.ScopeType,
 		TargetClient:  policy.TargetClient,
 		TargetChannel: policy.TargetChannel,
+		TargetAction:  policy.TargetAction,
 		Priority:      policy.Priority,
 		Active:        policy.Active,
 		Config: SecurityPolicyRulePayload{
+			RequireStepUp:         cfg.RequireStepUp,
 			RequireMFA:            cfg.RequireMFA,
 			AllowPassword:         cfg.AllowPassword,
 			AllowSSO:              cfg.AllowSSO,

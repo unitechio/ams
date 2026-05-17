@@ -21,6 +21,7 @@ func Setup(
 	jwtSvc *jwtpkg.Service,
 	permLoader middleware.PermissionLoader,
 	auditLogger middleware.AuditLogger,
+	stepUpPolicyRepo middleware.StepUpPolicyRepository,
 	authH *AuthHandler,
 	userH *UserHandler,
 	clientH *ClientHandler,
@@ -122,7 +123,7 @@ func Setup(
 			)
 			users.POST("/:id/reset-password",
 				middleware.RequirePermission(permission.PermissionUserUpdate),
-				middleware.RequireStepUp(jwtSvc),
+				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "user.reset_password", true),
 				userH.ResetPassword,
 			)
 		}
@@ -207,7 +208,7 @@ func Setup(
 			)
 			clients.POST("/:id/rotate-secret",
 				middleware.RequirePermission(permission.PermissionClientUpdate),
-				middleware.RequireStepUp(jwtSvc),
+				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "client.rotate_secret", true),
 				clientH.RotateSecret,
 			)
 			clients.DELETE("/:id",
@@ -233,7 +234,7 @@ func Setup(
 			)
 			serviceAccounts.POST("/:id/rotate-secret",
 				middleware.RequirePermission(permission.PermissionServiceUpdate),
-				middleware.RequireStepUp(jwtSvc),
+				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "client.rotate_secret", true),
 				clientH.RotateSecret,
 			)
 			serviceAccounts.DELETE("/:id",
@@ -296,7 +297,7 @@ func Setup(
 			)
 			securityPolicies.PUT("/:id",
 				middleware.RequirePermission(permission.PermissionPolicyUpdate),
-				middleware.RequireStepUp(jwtSvc),
+				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "policy.update", true),
 				securityPolicyH.Update,
 			)
 			securityPolicies.DELETE("/:id",
@@ -325,7 +326,7 @@ func Setup(
 			devices.GET("", authH.Devices)
 			devices.DELETE("/:id",
 				middleware.RequirePermission(permission.PermissionDeviceRevoke),
-				middleware.RequireStepUp(jwtSvc),
+				middleware.RequirePolicyStepUp(jwtSvc, stepUpPolicyRepo, "device.revoke", true),
 				authH.RevokeDevice,
 			)
 		}
