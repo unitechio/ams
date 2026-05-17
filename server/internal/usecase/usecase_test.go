@@ -1,7 +1,10 @@
 package usecase
 
 import (
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -10,6 +13,7 @@ import (
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
 	passwordsvc "github.com/owner/auth-server/internal/security/password"
 	"github.com/owner/auth-server/internal/security/ratelimit"
+	ssosvc "github.com/owner/auth-server/internal/security/sso"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -522,5 +526,80 @@ func TestAuthorizeCodeAndPKCEExchange(t *testing.T) {
 	}
 	if tokenResp.AccessToken == "" {
 		t.Fatalf("expected access token")
+	}
+}
+
+func TestCompleteSSOProvisionsUserAndReturnsSession(t *testing.T) {
+	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/token":
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			if got := r.PostForm.Get("code"); got != "provider-code-1" {
+				t.Fatalf("unexpected code %q", got)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"access_token": "provider-access-token",
+			})
+		case "/userinfo":
+			if got := r.Header.Get("Authorization"); got != "Bearer provider-access-token" {
+				t.Fatalf("unexpected authorization header %q", got)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"sub":            "google-sub-1",
+				"email":          "sso.user@example.com",
+				"email_verified": true,
+				"name":           "SSO User",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer providerServer.Close()
+
+	t.Setenv("SSO_GOOGLE_CLIENT_ID", "google-client")
+	t.Setenv("SSO_GOOGLE_CLIENT_SECRET", "google-secret")
+	t.Setenv("SSO_GOOGLE_REDIRECT_URI", "http://localhost:5173/sso/callback/google")
+	t.Setenv("SSO_GOOGLE_AUTHORIZE_URL", providerServer.URL+"/authorize")
+	t.Setenv("SSO_GOOGLE_TOKEN_URL", providerServer.URL+"/token")
+	t.Setenv("SSO_GOOGLE_USERINFO_URL", providerServer.URL+"/userinfo")
+
+	_, state, err := ssosvc.StartURL("google")
+	if err != nil {
+		t.Fatalf("start sso: %v", err)
+	}
+
+	userRepo := newtestUserRepo()
+	tokenRepo := &testTokenRepo{}
+	authUC := NewAuthUsecase(userRepo, tokenRepo, newTestClientRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", 15*time.Minute, time.Hour))
+
+	resp, err := authUC.CompleteSSO("google", "provider-code-1", state, &CompleteSSORequest{
+		ClientID:          "web_portal",
+		Channel:           "web",
+		DeviceName:        "Chrome on Windows",
+		DeviceFingerprint: "google-device-1",
+		TrustDevice:       true,
+		IPAddress:         "127.0.0.1",
+		UserAgent:         "go test",
+	})
+	if err != nil {
+		t.Fatalf("complete sso: %v", err)
+	}
+	if resp.AccessToken == "" || resp.RefreshToken == "" {
+		t.Fatalf("expected local session tokens to be issued")
+	}
+	if resp.User.Email != "sso.user@example.com" {
+		t.Fatalf("expected provisioned user email, got %q", resp.User.Email)
+	}
+	provisioned, err := userRepo.FindByEmail("sso.user@example.com")
+	if err != nil {
+		t.Fatalf("expected provisioned user to exist: %v", err)
+	}
+	if !provisioned.EmailVerified {
+		t.Fatalf("expected provisioned SSO user to be marked email verified")
+	}
+	if !strings.HasPrefix(provisioned.Username, "sso") && !strings.HasPrefix(provisioned.Username, "sso-user") {
+		t.Fatalf("expected generated username for SSO user, got %q", provisioned.Username)
 	}
 }

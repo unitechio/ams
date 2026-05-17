@@ -145,13 +145,48 @@ func (h *AuthHandler) SSOProviders(c *gin.Context) {
 }
 
 func (h *AuthHandler) StartSSO(c *gin.Context) {
-	state := c.DefaultQuery("state", "ams-web")
-	redirectURL, err := sso.StartURL(c.Param("provider"), state)
+	redirectURL, _, err := sso.StartURL(c.Param("provider"))
 	if err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 	ok(c, gin.H{"redirect_url": redirectURL})
+}
+
+func (h *AuthHandler) CompleteSSO(c *gin.Context) {
+	var body struct {
+		Code              string `json:"code" binding:"required"`
+		State             string `json:"state" binding:"required"`
+		ClientID          string `json:"client_id"`
+		Channel           string `json:"channel"`
+		DeviceName        string `json:"device_name"`
+		DeviceFingerprint string `json:"device_fingerprint"`
+		OTPCode           string `json:"otp_code"`
+		TrustDevice       bool   `json:"trust_device"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	resp, err := h.uc.CompleteSSO(c.Param("provider"), body.Code, body.State, &usecase.CompleteSSORequest{
+		ClientID:          body.ClientID,
+		Channel:           body.Channel,
+		DeviceName:        body.DeviceName,
+		DeviceFingerprint: body.DeviceFingerprint,
+		OTPCode:           body.OTPCode,
+		TrustDevice:       body.TrustDevice,
+		IPAddress:         c.ClientIP(),
+		UserAgent:         c.Request.UserAgent(),
+	})
+	if err != nil {
+		status := http.StatusUnauthorized
+		if err == usecase.ErrOTPRequired {
+			status = http.StatusPreconditionRequired
+		}
+		fail(c, status, err.Error())
+		return
+	}
+	ok(c, resp)
 }
 
 func (h *AuthHandler) Logout(c *gin.Context) {

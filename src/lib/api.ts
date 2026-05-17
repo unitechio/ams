@@ -317,6 +317,16 @@ export const authApi = {
     authRequest<SSOProvider[]>('GET', '/auth/sso/providers'),
   startSSO: (provider: string) =>
     authRequest<{ redirect_url: string }>('GET', `/auth/sso/${provider}/start`),
+  completeSSO: (provider: string, payload: {
+    code: string;
+    state: string;
+    client_id?: string;
+    channel?: string;
+    device_name?: string;
+    device_fingerprint?: string;
+    otp_code?: string;
+    trust_device?: boolean;
+  }) => authRequest<LoginResponse>('POST', `/auth/sso/${provider}/complete`, payload),
   authorize: (payload: {
     username: string;
     password: string;

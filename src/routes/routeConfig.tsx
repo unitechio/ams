@@ -26,6 +26,7 @@ const DevicesPage = lazy(() => import("@/pages/DevicesPage"));
 const AuthClientsPage = lazy(() => import("@/pages/AuthClientsPage"));
 const ServiceAccountsPage = lazy(() => import("@/pages/ServiceAccountsPage"));
 const OAuthCallbackPage = lazy(() => import("@/pages/OAuthCallbackPage"));
+const SSOCallbackPage = lazy(() => import("@/pages/SSOCallbackPage"));
 
 export const routes: RouteObject[] = [
   {
@@ -35,6 +36,10 @@ export const routes: RouteObject[] = [
   {
     path: "/oauth/callback",
     element: Loadable(OAuthCallbackPage)({}),
+  },
+  {
+    path: "/sso/callback/:provider",
+    element: Loadable(SSOCallbackPage)({}),
   },
   {
     path: "/",

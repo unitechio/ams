@@ -61,6 +61,7 @@ func Setup(
 		public.POST("/verify-email", authH.VerifyEmail)
 		public.GET("/sso/providers", authH.SSOProviders)
 		public.GET("/sso/:provider/start", authH.StartSSO)
+		public.POST("/sso/:provider/complete", authH.CompleteSSO)
 	}
 
 	// ── Authenticated routes (JWT required) ───────────────────────────────────

@@ -19,6 +19,7 @@ import (
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
 	passwordsvc "github.com/owner/auth-server/internal/security/password"
 	"github.com/owner/auth-server/internal/security/ratelimit"
+	"github.com/owner/auth-server/internal/security/sso"
 	totpsvc "github.com/owner/auth-server/internal/security/totp"
 )
 
@@ -112,6 +113,17 @@ type AuthorizeCodeResponse struct {
 	State       string    `json:"state"`
 	RedirectURI string    `json:"redirect_uri"`
 	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+type CompleteSSORequest struct {
+	ClientID          string `json:"client_id"`
+	Channel           string `json:"channel"`
+	DeviceName        string `json:"device_name"`
+	DeviceFingerprint string `json:"device_fingerprint"`
+	OTPCode           string `json:"otp_code"`
+	TrustDevice       bool   `json:"trust_device"`
+	IPAddress         string `json:"-"`
+	UserAgent         string `json:"-"`
 }
 
 type DeviceListItem struct {
@@ -487,6 +499,91 @@ func (uc *AuthUsecase) AuthorizeCode(req *AuthorizeCodeRequest) (*AuthorizeCodeR
 		RedirectURI: redirectURI,
 		ExpiresAt:   entry.ExpiresAt,
 	}, nil
+}
+
+func (uc *AuthUsecase) CompleteSSO(providerID, code, state string, req *CompleteSSORequest) (*LoginResponse, error) {
+	identity, err := sso.Complete(providerID, state, code)
+	if err != nil {
+		return nil, err
+	}
+	user, err := uc.findOrProvisionSSOUser(identity)
+	if err != nil {
+		return nil, err
+	}
+	if user.Status == "inactive" {
+		uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", "Tài khoản SSO bị vô hiệu hóa")
+		return nil, ErrAccountInactive
+	}
+	if user.Status == "locked" && user.LockedUntil != nil && user.LockedUntil.Before(time.Now()) {
+		user.Status = "active"
+		user.LockedUntil = nil
+		user.FailedLogins = 0
+		_ = uc.userRepo.Save(user)
+	}
+	if user.IsLocked() {
+		uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "locked", "Tài khoản SSO đang bị khóa")
+		return nil, ErrAccountLocked
+	}
+	loginReq := &LoginRequest{
+		ClientID:          req.ClientID,
+		GrantType:         "authorization_code",
+		Channel:           req.Channel,
+		DeviceName:        req.DeviceName,
+		DeviceFingerprint: req.DeviceFingerprint,
+		OTPCode:           req.OTPCode,
+		TrustDevice:       req.TrustDevice,
+		IPAddress:         req.IPAddress,
+		UserAgent:         req.UserAgent,
+	}
+	client, channel, deviceName, deviceFingerprint, err := uc.validateClientAccess(user, loginReq)
+	if err != nil {
+		uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", err.Error())
+		return nil, err
+	}
+	trustedDevice := false
+	if deviceFingerprint != "" {
+		if _, err := uc.tokenRepo.FindTrustedDevice(user.ID, client.ClientID, deviceFingerprint); err == nil {
+			trustedDevice = true
+		}
+	}
+	if user.TwoFactorEnabled {
+		if strings.TrimSpace(req.OTPCode) == "" {
+			uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", "Thiếu mã TOTP cho SSO")
+			return nil, ErrOTPRequired
+		}
+		if !totpsvc.ValidateCode(user.TOTPSecret, strings.TrimSpace(req.OTPCode), time.Now()) {
+			uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", "Mã TOTP SSO không hợp lệ")
+			return nil, errors.New("mã OTP không hợp lệ")
+		}
+	} else if user.RequireOTP && !trustedDevice {
+		if strings.TrimSpace(req.OTPCode) == "" {
+			if err := uc.issueEmailOTP(user, "sso_login"); err != nil {
+				return nil, err
+			}
+			uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", "Đã gửi email OTP cho phiên SSO")
+			return nil, ErrOTPRequired
+		}
+		if !verifyOneTimeCode(user.EmailOTPHash, user.EmailOTPExpiresAt, strings.TrimSpace(req.OTPCode)) {
+			uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", "Email OTP SSO không hợp lệ")
+			return nil, errors.New("mã OTP không hợp lệ")
+		}
+		user.EmailOTPHash = ""
+		user.EmailOTPExpiresAt = nil
+		_ = uc.userRepo.Save(user)
+	}
+	_ = uc.userRepo.UpdateLastLogin(user.ID)
+	uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "success", "sso:"+providerID)
+	return uc.buildLoginResponse(user, sessionContext{
+		SessionID:         generateOpaqueID(16),
+		TokenFamily:       generateOpaqueID(16),
+		ClientID:          client.ClientID,
+		Audiences:         cloneStrings(client.Audiences),
+		DeviceName:        fmt.Sprintf("%s [%s]", deviceName, channel),
+		DeviceFingerprint: deviceFingerprint,
+		IPAddress:         req.IPAddress,
+		UserAgent:         req.UserAgent,
+		Trusted:           trustedDevice || req.TrustDevice,
+	})
 }
 
 func (uc *AuthUsecase) Logout(userID uint, sessionID string) error {
@@ -1753,6 +1850,95 @@ func containsOrEmpty(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+func (uc *AuthUsecase) findOrProvisionSSOUser(identity *sso.Identity) (*domain.User, error) {
+	user, err := uc.userRepo.FindByEmail(identity.Email)
+	if err == nil {
+		changed := false
+		if identity.EmailVerified && !user.EmailVerified {
+			user.EmailVerified = true
+			changed = true
+		}
+		if strings.TrimSpace(user.FullName) == "" && strings.TrimSpace(identity.Name) != "" {
+			user.FullName = strings.TrimSpace(identity.Name)
+			changed = true
+		}
+		if changed {
+			if saveErr := uc.userRepo.Save(user); saveErr != nil {
+				return nil, saveErr
+			}
+		}
+		return user, nil
+	}
+	passwordHash, hashErr := passwordsvc.Hash(generateOpaqueID(24) + "Aa1!")
+	if hashErr != nil {
+		return nil, hashErr
+	}
+	user = &domain.User{
+		Username:        uc.generateUniqueUsername(identity),
+		PasswordHash:    passwordHash,
+		PasswordHistory: []string{passwordHash},
+		AllowedClients:  []string{},
+		AllowedChannels: []string{},
+		EmailVerified:   true,
+		Email:           strings.TrimSpace(identity.Email),
+		FullName:        strings.TrimSpace(identity.Name),
+		Status:          "active",
+	}
+	if user.FullName == "" {
+		user.FullName = strings.TrimSpace(identity.Username)
+	}
+	if user.FullName == "" {
+		user.FullName = user.Email
+	}
+	if err := uc.userRepo.Save(user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func (uc *AuthUsecase) generateUniqueUsername(identity *sso.Identity) string {
+	base := sanitizeUsername(identity.Username)
+	if base == "" {
+		localPart := identity.Email
+		if idx := strings.Index(localPart, "@"); idx > 0 {
+			localPart = localPart[:idx]
+		}
+		base = sanitizeUsername(localPart)
+	}
+	if base == "" {
+		base = "sso-user"
+	}
+	users, _, err := uc.userRepo.List(nil)
+	if err != nil {
+		return base + "-" + strings.ToLower(generateOpaqueID(4))
+	}
+	taken := map[string]struct{}{}
+	for _, item := range users {
+		taken[strings.ToLower(item.Username)] = struct{}{}
+	}
+	candidate := base
+	for i := 1; ; i++ {
+		if _, exists := taken[strings.ToLower(candidate)]; !exists {
+			return candidate
+		}
+		candidate = fmt.Sprintf("%s-%d", base, i+1)
+	}
+}
+
+func sanitizeUsername(raw string) string {
+	raw = strings.TrimSpace(strings.ToLower(raw))
+	if raw == "" {
+		return ""
+	}
+	var b strings.Builder
+	for _, ch := range raw {
+		if unicode.IsLetter(ch) || unicode.IsDigit(ch) || ch == '.' || ch == '-' || ch == '_' {
+			b.WriteRune(ch)
+		}
+	}
+	return strings.Trim(b.String(), "-._")
 }
 
 func (uc *AuthUsecase) validateClientAccess(user *domain.User, req *LoginRequest) (*domain.AuthClient, string, string, string, error) {
