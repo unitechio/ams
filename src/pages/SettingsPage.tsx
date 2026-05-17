@@ -9,6 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { PERMISSION_LABELS } from '@/auth/permissions';
 import { usePermission } from '@/auth/usePermission';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { StepUpDialog } from '@/components/auth/StepUpDialog';
 
 interface PasswordInputProps {
   label: string;
@@ -60,6 +61,8 @@ export default function SettingsPage() {
   // Sessions State
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [stepUpAction, setStepUpAction] = useState<null | (() => Promise<void>)>(null);
 
   React.useEffect(() => {
     fetchSessions();
@@ -78,31 +81,40 @@ export default function SettingsPage() {
   };
 
   const handleRevokeSession = async (id: string) => {
-    try {
-      await authApi.revokeSession(id);
-      setSessions(s => s.filter(x => x.id !== id));
-    } catch (e: any) {
-      console.error("Failed to revoke session", e);
-    }
+    setStepUpAction(() => async () => {
+      try {
+        await authApi.revokeSession(id);
+        setSessions(s => s.filter(x => x.id !== id));
+      } catch (e: any) {
+        console.error("Failed to revoke session", e);
+      }
+    });
+    setStepUpOpen(true);
   };
 
   const handleRevokeAll = async () => {
-    try {
-      await authApi.revokeAllSessions();
-      setSessions(s => s.filter(x => x.is_current));
-    } catch (e: any) {
-      console.error("Failed to revoke all sessions", e);
-    }
+    setStepUpAction(() => async () => {
+      try {
+        await authApi.revokeAllSessions();
+        setSessions(s => s.filter(x => x.is_current));
+      } catch (e: any) {
+        console.error("Failed to revoke all sessions", e);
+      }
+    });
+    setStepUpOpen(true);
   };
 
   const handleToggle2FA = async () => {
     if (is2FAEnabled) {
-      try {
-        await authApi.disable2FA();
-        setIs2FAEnabled(false);
-      } catch (e: any) {
-        console.error("Failed to disable 2FA", e);
-      }
+      setStepUpAction(() => async () => {
+        try {
+          await authApi.disable2FA();
+          setIs2FAEnabled(false);
+        } catch (e: any) {
+          console.error("Failed to disable 2FA", e);
+        }
+      });
+      setStepUpOpen(true);
     } else {
       try {
         const data = await authApi.setup2FA();
@@ -149,6 +161,15 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
+      <StepUpDialog
+        open={stepUpOpen}
+        onOpenChange={setStepUpOpen}
+        onVerified={async () => {
+          if (stepUpAction) await stepUpAction();
+          setStepUpAction(null);
+        }}
+        description="Xác thực lại để thu hồi phiên hoặc thay đổi cấu hình 2FA."
+      />
       <PageHeader
         title="Cài đặt tài khoản"
         subtitle="Quản lý thông tin cá nhân và bảo mật" />
@@ -207,6 +228,7 @@ export default function SettingsPage() {
             <div className="space-y-1">
               {[
                 { label: 'Email', value: user?.email },
+                { label: 'Email verified', value: user?.email_verified ? 'Đã xác minh' : 'Chưa xác minh' },
                 { label: 'Trạng thái', value: user?.status },
                 {
                   label: 'Phân quyền',
@@ -422,9 +444,12 @@ export default function SettingsPage() {
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                           {s.device}
                           {s.is_current && <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400 rounded-full uppercase tracking-wider font-bold">Hiện tại</span>}
+                          {s.trusted && <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full uppercase tracking-wider font-bold">Trusted</span>}
                         </p>
                         <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
                           <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> {s.location} ({s.ip})</span>
+                          <span>•</span>
+                          <span>{s.client_id || 'web_portal'}</span>
                           <span>•</span>
                           <span>{s.last_active}</span>
                         </div>

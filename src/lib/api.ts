@@ -6,6 +6,8 @@ let _accessToken: string | null = localStorage.getItem('access_token');
 let _onUnauthorized: (() => void) | null = null;
 // Prevent multiple concurrent logout triggers
 let _unauthorizedHandled = false;
+const STEP_UP_TOKEN_KEY = 'step_up_token';
+const STEP_UP_EXPIRES_KEY = 'step_up_expires_at';
 
 export function setToken(token: string | null) {
   _accessToken = token;
@@ -48,6 +50,8 @@ async function request<T>(
 ): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (_accessToken) headers['Authorization'] = `Bearer ${_accessToken}`;
+  const stepUpToken = getStepUpToken();
+  if (stepUpToken) headers['X-Step-Up-Token'] = stepUpToken;
 
   const res = await fetch(`${BASE_URL}${path}`, {
     method,
@@ -108,6 +112,27 @@ export interface LoginResponse {
   require_password_change?: boolean; // alias from some backends
 }
 
+export function setStepUpToken(token: string | null, expiresAt?: string) {
+  if (token) {
+    localStorage.setItem(STEP_UP_TOKEN_KEY, token);
+    if (expiresAt) localStorage.setItem(STEP_UP_EXPIRES_KEY, expiresAt);
+  } else {
+    localStorage.removeItem(STEP_UP_TOKEN_KEY);
+    localStorage.removeItem(STEP_UP_EXPIRES_KEY);
+  }
+}
+
+export function getStepUpToken() {
+  const token = localStorage.getItem(STEP_UP_TOKEN_KEY);
+  const expiresAt = localStorage.getItem(STEP_UP_EXPIRES_KEY);
+  if (!token || !expiresAt) return null;
+  if (new Date(expiresAt).getTime() <= Date.now()) {
+    setStepUpToken(null);
+    return null;
+  }
+  return token;
+}
+
 export interface UserInfo {
   id:          number;
   username:    string;
@@ -117,6 +142,9 @@ export interface UserInfo {
   status:      string;
   roles:       string[];
   permissions: string[]; // "perm:scope" pairs or ["*"]
+  allowed_clients?: string[];
+  allowed_channels?: string[];
+  email_verified?: boolean;
   password_expires_at?: string;
   one_time_password?: boolean;
   require_otp?: boolean;
@@ -137,10 +165,13 @@ export interface ApiUser {
   username:  string;
   full_name: string;
   email:     string;
+  email_verified?: boolean;
   phone:     string;
   status:    string;
   roles:     string[];
   role_ids:  number[];
+  allowed_clients?: string[];
+  allowed_channels?: string[];
   password_expires_at?: string;
   one_time_password?:   boolean;
   require_otp?:         boolean;
@@ -190,13 +221,28 @@ export interface ApiMenu {
   children?:       ApiMenu[];
 }
 
+export interface SSOProvider {
+  id: string;
+  name: string;
+  type: string;
+}
+
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
 export const authApi = {
   // Use authRequest (no global 401 interceptor) so wrong-password errors
   // don't accidentally trigger the session-expired logout handler.
-  login: (username: string, password: string) =>
-    authRequest<LoginResponse>('POST', '/auth/login', { username, password }),
+  login: (username: string, password: string, options?: {
+    client_id?: string;
+    client_secret?: string;
+    grant_type?: string;
+    channel?: string;
+    device_name?: string;
+    device_fingerprint?: string;
+    otp_code?: string;
+    trust_device?: boolean;
+  }) =>
+    authRequest<LoginResponse>('POST', '/auth/login', { username, password, ...options }),
   logout: async () => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (_accessToken) headers['Authorization'] = `Bearer ${_accessToken}`;
@@ -214,6 +260,8 @@ export const authApi = {
     post<LoginResponse>('/auth/refresh', { refresh_token: refreshToken }),
   changePassword: (old_password: string, new_password: string) =>
     put<void>('/auth/change-password', { old_password, new_password }),
+  stepUp: (password: string, otp_code?: string) =>
+    post<{ step_up_token: string; expires_at: string }>('/auth/step-up', { password, otp_code }),
   myMenus: () =>
     get<ApiMenu[]>('/my-menus'),
   sessions: () =>
@@ -228,6 +276,10 @@ export const authApi = {
     post<void>('/auth/2fa/verify', { code }),
   disable2FA: () =>
     post<void>('/auth/2fa/disable', {}),
+  ssoProviders: () =>
+    authRequest<SSOProvider[]>('GET', '/auth/sso/providers'),
+  startSSO: (provider: string) =>
+    authRequest<{ redirect_url: string }>('GET', `/auth/sso/${provider}/start`),
 };
 
 // ─── Users API ────────────────────────────────────────────────────────────────
@@ -246,12 +298,14 @@ export const usersApi = {
     email: string; phone?: string; status?: string; role_ids?: number[];
     password_expires_at?: string; one_time_password?: boolean;
     require_otp?: boolean; two_factor_enabled?: boolean;
+    allowed_clients?: string[]; allowed_channels?: string[];
   }) => post<ApiUser>('/users', data),
   update: (id: number, data: {
     full_name?: string; email?: string; phone?: string;
     status?: string; role_ids?: number[];
     password_expires_at?: string; one_time_password?: boolean;
     require_otp?: boolean; two_factor_enabled?: boolean;
+    allowed_clients?: string[]; allowed_channels?: string[];
   }) => put<ApiUser>(`/users/${id}`, data),
   delete: (id: number) => del<void>(`/users/${id}`),
   resetPassword: (id: number, password: string, one_time_password = true) =>

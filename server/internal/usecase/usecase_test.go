@@ -7,6 +7,7 @@ import (
 
 	"github.com/owner/auth-server/internal/domain"
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
+	passwordsvc "github.com/owner/auth-server/internal/security/password"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -107,8 +108,12 @@ func (r *testUserRepo) UpdateFailedLogin(userID uint, count int, lockedUntil *ti
 }
 
 type testTokenRepo struct {
-	saved         []*domain.RefreshToken
-	revokedUserID uint
+	saved          []*domain.RefreshToken
+	revokedUserID  uint
+	revokedFamily  string
+	revokedSession string
+	byToken        map[string]*domain.RefreshToken
+	trustedDevice  *domain.RefreshToken
 }
 
 func (r *testTokenRepo) Save(t *domain.RefreshToken) error {
@@ -117,6 +122,11 @@ func (r *testTokenRepo) Save(t *domain.RefreshToken) error {
 }
 
 func (r *testTokenRepo) FindByToken(token string) (*domain.RefreshToken, error) {
+	if r.byToken != nil {
+		if item, ok := r.byToken[token]; ok {
+			return item, nil
+		}
+	}
 	return nil, errors.New("not implemented")
 }
 
@@ -127,6 +137,27 @@ func (r *testTokenRepo) RevokeByUserID(userID uint) error {
 
 func (r *testTokenRepo) RevokeToken(token string) error {
 	return nil
+}
+
+func (r *testTokenRepo) RevokeSession(userID uint, sessionID string) error {
+	r.revokedSession = sessionID
+	return nil
+}
+
+func (r *testTokenRepo) RevokeFamily(familyID string, reason string) error {
+	r.revokedFamily = familyID
+	return nil
+}
+
+func (r *testTokenRepo) ListActiveSessions(userID uint) ([]*domain.RefreshToken, error) {
+	return nil, nil
+}
+
+func (r *testTokenRepo) FindTrustedDevice(userID uint, clientID, fingerprint string) (*domain.RefreshToken, error) {
+	if r.trustedDevice != nil {
+		return r.trustedDevice, nil
+	}
+	return nil, errors.New("not found")
 }
 
 type testAuthHistoryRepo struct{ items []*domain.AuthHistory }
@@ -151,7 +182,7 @@ func hashForTest(t *testing.T, password string) string {
 
 func TestCreateUserStoresPasswordHistory(t *testing.T) {
 	repo := newtestUserRepo()
-	uc := NewUserUsecase(repo)
+	uc := NewUserUsecase(repo, nil)
 
 	resp, err := uc.Create(&CreateUserReq{
 		Username: "new.user",
@@ -167,7 +198,7 @@ func TestCreateUserStoresPasswordHistory(t *testing.T) {
 	if len(saved.PasswordHistory) != 1 {
 		t.Fatalf("expected password history to contain initial password, got %d entries", len(saved.PasswordHistory))
 	}
-	if bcrypt.CompareHashAndPassword([]byte(saved.PasswordHistory[0]), []byte("TempPass@123")) != nil {
+	if ok, _, err := passwordsvc.Verify(saved.PasswordHistory[0], "TempPass@123"); err != nil || !ok {
 		t.Fatalf("expected initial password to be stored in password history")
 	}
 }
@@ -211,7 +242,7 @@ func TestResetPasswordMarksAccountAsOneTimePassword(t *testing.T) {
 		PasswordHistory: []string{oldHash},
 		Status:          "active",
 	})
-	uc := NewUserUsecase(userRepo)
+	uc := NewUserUsecase(userRepo, &testTokenRepo{})
 
 	if err := uc.ResetPassword(12, "AdminReset@123", true); err != nil {
 		t.Fatalf("reset password: %v", err)
@@ -256,5 +287,91 @@ func TestLoginResponseMarksExpiredPassword(t *testing.T) {
 	}
 	if resp.PasswordChangeReason != "password_expired" {
 		t.Fatalf("expected password change reason to be password_expired, got %q", resp.PasswordChangeReason)
+	}
+}
+
+func TestLoginUpgradesLegacyBcryptHashToArgon2(t *testing.T) {
+	legacyHash := hashForTest(t, "LegacyPass@123")
+	userRepo := newtestUserRepo(&domain.User{
+		ID:              30,
+		Username:        "legacy.user",
+		PasswordHash:    legacyHash,
+		PasswordHistory: []string{legacyHash},
+		Status:          "active",
+	})
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+
+	if _, err := authUC.Login(&LoginRequest{
+		Username:  "legacy.user",
+		Password:  "LegacyPass@123",
+		IPAddress: "127.0.0.1",
+		UserAgent: "go test",
+	}); err != nil {
+		t.Fatalf("login: %v", err)
+	}
+
+	updated := userRepo.users[30]
+	if updated.PasswordHash == legacyHash {
+		t.Fatalf("expected password hash to be upgraded after successful login")
+	}
+	if ok, _, err := passwordsvc.Verify(updated.PasswordHash, "LegacyPass@123"); err != nil || !ok {
+		t.Fatalf("expected upgraded hash to verify")
+	}
+}
+
+func TestLoginRequiresEmailOTPForUntrustedDevice(t *testing.T) {
+	passwordHash := hashForTest(t, "OtpPass@123")
+	userRepo := newtestUserRepo(&domain.User{
+		ID:              31,
+		Username:        "otp.user",
+		PasswordHash:    passwordHash,
+		RequireOTP:      true,
+		Status:          "active",
+		Email:           "otp@example.com",
+		PasswordHistory: []string{passwordHash},
+	})
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+
+	_, err := authUC.Login(&LoginRequest{
+		Username:          "otp.user",
+		Password:          "OtpPass@123",
+		ClientID:          "web_portal",
+		Channel:           "web",
+		DeviceFingerprint: "device-1",
+		IPAddress:         "127.0.0.1",
+		UserAgent:         "go test",
+	})
+	if !errors.Is(err, ErrOTPRequired) {
+		t.Fatalf("expected otp required, got %v", err)
+	}
+	if userRepo.users[31].EmailOTPHash == "" || userRepo.users[31].EmailOTPExpiresAt == nil {
+		t.Fatalf("expected email otp to be generated and persisted")
+	}
+}
+
+func TestStepUpAcceptsPersistedEmailOTP(t *testing.T) {
+	passwordHash := hashForTest(t, "StepUpPass@123")
+	expiry := time.Now().Add(5 * time.Minute)
+	userRepo := newtestUserRepo(&domain.User{
+		ID:                32,
+		Username:          "step.user",
+		PasswordHash:      passwordHash,
+		PasswordHistory:   []string{passwordHash},
+		RequireOTP:        true,
+		EmailOTPHash:      hashOneTimeCode("123456"),
+		EmailOTPExpiresAt: &expiry,
+		Status:            "active",
+	})
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+
+	resp, err := authUC.StepUp(32, "session-1", "web_portal", "StepUpPass@123", "123456")
+	if err != nil {
+		t.Fatalf("step-up: %v", err)
+	}
+	if resp.StepUpToken == "" {
+		t.Fatalf("expected step-up token to be issued")
+	}
+	if userRepo.users[32].EmailOTPHash != "" {
+		t.Fatalf("expected email otp to be cleared after successful step-up")
 	}
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/owner/auth-server/internal/authorization/permission"
 	"github.com/owner/auth-server/internal/domain"
-	"golang.org/x/crypto/bcrypt"
+	passwordsvc "github.com/owner/auth-server/internal/security/password"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -148,7 +148,7 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 
 	// ── Default users
 	hashPw := func(pw string) string {
-		h, _ := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+		h, _ := passwordsvc.Hash(pw)
 		return string(h)
 	}
 	passwordHistoryJSON := func(hash string) string {
@@ -162,23 +162,23 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 	}{
 		{func() GormUser {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "superadmin", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "superadmin@system.vn", FullName: "Super Administrator", Status: "active", LastLogin: &now}
+			return GormUser{Username: "superadmin", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), EmailVerified: true, Email: "superadmin@system.vn", FullName: "Super Administrator", Status: "active", LastLogin: &now}
 		}(), 1},
 		{func() GormUser {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "admin", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "admin@system.vn", FullName: "Administrator", Status: "active"}
+			return GormUser{Username: "admin", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), AllowedClientsJSON: `["web_portal","crm_portal"]`, AllowedChannelsJSON: `["web","crm"]`, EmailVerified: true, Email: "admin@system.vn", FullName: "Administrator", Status: "active"}
 		}(), 2},
 		{func() GormUser {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "manager", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "manager@system.vn", FullName: "Nguyễn Văn Quản Lý", Status: "active"}
+			return GormUser{Username: "manager", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), AllowedClientsJSON: `["web_portal","crm_portal"]`, AllowedChannelsJSON: `["web","crm"]`, EmailVerified: true, Email: "manager@system.vn", FullName: "Nguyễn Văn Quản Lý", Status: "active"}
 		}(), 3},
 		{func() GormUser {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "operator", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "operator@system.vn", FullName: "Trần Thị Vận Hành", Status: "active"}
+			return GormUser{Username: "operator", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), AllowedClientsJSON: `["web_portal"]`, AllowedChannelsJSON: `["web"]`, EmailVerified: true, Email: "operator@system.vn", FullName: "Trần Thị Vận Hành", Status: "active"}
 		}(), 4},
 		{func() GormUser {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "viewer", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "viewer@system.vn", FullName: "Lê Văn Chỉ Xem", Status: "active"}
+			return GormUser{Username: "viewer", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), AllowedClientsJSON: `["mobile_app_tpv_public"]`, AllowedChannelsJSON: `["mobile"]`, EmailVerified: true, Email: "viewer@system.vn", FullName: "Lê Văn Chỉ Xem", Status: "active"}
 		}(), 5},
 	}
 	for _, u := range users {

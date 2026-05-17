@@ -17,6 +17,7 @@ import { PERMISSIONS } from '@/auth/permissions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { generateRandomPassword, getPasswordPolicyHint } from '@/lib/password';
+import { StepUpDialog } from '@/components/auth/StepUpDialog';
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   active: { label: 'Hoạt động', cls: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-200 dark:ring-emerald-800/50' },
@@ -80,6 +81,8 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [resetOneTimePassword, setResetOneTimePassword] = useState(true);
   const [pendingIds, setPendingIds] = useState<number[]>([]);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [stepUpAction, setStepUpAction] = useState<null | (() => Promise<void>)>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError('');
@@ -102,26 +105,32 @@ export default function UsersPage() {
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    setSaving(true);
-    try {
-      await usersApi.delete(deleteTarget.id);
-      toast.success(`Đã xóa ${deleteTarget.full_name}`);
-      setDeleteOpen(false); setDeleteTarget(null); fetchData();
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Lỗi xóa người dùng');
-    } finally { setSaving(false); }
+    setStepUpAction(() => async () => {
+      setSaving(true);
+      try {
+        await usersApi.delete(deleteTarget.id);
+        toast.success(`Đã xóa ${deleteTarget.full_name}`);
+        setDeleteOpen(false); setDeleteTarget(null); fetchData();
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : 'Lỗi xóa người dùng');
+      } finally { setSaving(false); }
+    });
+    setStepUpOpen(true);
   };
 
   const handleResetPassword = async () => {
     if (!resetTarget || !newPassword) return;
-    setSaving(true);
-    try {
-      await usersApi.resetPassword(resetTarget.id, newPassword, resetOneTimePassword);
-      toast.success('Đặt lại mật khẩu thành công');
-      setResetOpen(false); setResetTarget(null); setNewPassword(''); setResetOneTimePassword(true);
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : 'Lỗi đặt lại mật khẩu');
-    } finally { setSaving(false); }
+    setStepUpAction(() => async () => {
+      setSaving(true);
+      try {
+        await usersApi.resetPassword(resetTarget.id, newPassword, resetOneTimePassword);
+        toast.success('Đặt lại mật khẩu thành công');
+        setResetOpen(false); setResetTarget(null); setNewPassword(''); setResetOneTimePassword(true);
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : 'Lỗi đặt lại mật khẩu');
+      } finally { setSaving(false); }
+    });
+    setStepUpOpen(true);
   };
 
   const handleToggleStatus = async (u: ApiUser) => {
@@ -142,6 +151,15 @@ export default function UsersPage() {
 
   return (
     <>
+      <StepUpDialog
+        open={stepUpOpen}
+        onOpenChange={setStepUpOpen}
+        onVerified={async () => {
+          if (stepUpAction) await stepUpAction();
+          setStepUpAction(null);
+        }}
+        description="Xác thực lại để xóa người dùng hoặc đặt lại mật khẩu."
+      />
       <div className="space-y-6">
         <PageHeader
           title="Quản lý người dùng"

@@ -6,8 +6,8 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/owner/auth-server/internal/authorization/permission"
-	"github.com/owner/auth-server/internal/middleware"
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
+	"github.com/owner/auth-server/internal/middleware"
 )
 
 // Setup builds the Gin engine with all routes and middleware.
@@ -56,6 +56,8 @@ func Setup(
 		public.POST("/forgot-password", authH.ForgotPassword)
 		public.POST("/reset-password", authH.ResetPasswordWithToken)
 		public.POST("/verify-email", authH.VerifyEmail)
+		public.GET("/sso/providers", authH.SSOProviders)
+		public.GET("/sso/:provider/start", authH.StartSSO)
 	}
 
 	// ── Authenticated routes (JWT required) ───────────────────────────────────
@@ -72,16 +74,17 @@ func Setup(
 			authGrp.GET("/me", authH.Me)
 			authGrp.PUT("/change-password", authH.ChangePassword)
 			authGrp.POST("/send-verification-email", authH.SendVerificationEmail)
+			authGrp.POST("/step-up", authH.StepUp)
 
 			// Session Management
 			authGrp.GET("/sessions", authH.Sessions)
-			authGrp.DELETE("/sessions/:id", authH.RevokeSession)
-			authGrp.DELETE("/sessions", authH.RevokeAllSessions)
+			authGrp.DELETE("/sessions/:id", middleware.RequireStepUp(jwtSvc), authH.RevokeSession)
+			authGrp.DELETE("/sessions", middleware.RequireStepUp(jwtSvc), authH.RevokeAllSessions)
 
 			// 2FA Management
 			authGrp.POST("/2fa/setup", authH.Setup2FA)
 			authGrp.POST("/2fa/verify", authH.Verify2FA)
-			authGrp.POST("/2fa/disable", authH.Disable2FA)
+			authGrp.POST("/2fa/disable", middleware.RequireStepUp(jwtSvc), authH.Disable2FA)
 		}
 
 		// Permission-filtered menu for current user (used by sidebar)
@@ -107,10 +110,12 @@ func Setup(
 			)
 			users.DELETE("/:id",
 				middleware.RequirePermission(permission.PermissionUserDelete),
+				middleware.RequireStepUp(jwtSvc),
 				userH.Delete,
 			)
 			users.POST("/:id/reset-password",
 				middleware.RequirePermission(permission.PermissionUserUpdate),
+				middleware.RequireStepUp(jwtSvc),
 				userH.ResetPassword,
 			)
 		}
@@ -136,6 +141,7 @@ func Setup(
 			// Assign permissions to role requires role.assign
 			roles.PUT("/:id/permissions",
 				middleware.RequirePermission(permission.PermissionRoleAssign),
+				middleware.RequireStepUp(jwtSvc),
 				roleH.AssignPermissions,
 			)
 		}

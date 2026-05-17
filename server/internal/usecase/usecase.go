@@ -2,9 +2,13 @@ package usecase
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 	"unicode"
@@ -12,7 +16,9 @@ import (
 	"github.com/owner/auth-server/internal/authorization/permission"
 	"github.com/owner/auth-server/internal/domain"
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
-	"golang.org/x/crypto/bcrypt"
+	"github.com/owner/auth-server/internal/security/clientpolicy"
+	passwordsvc "github.com/owner/auth-server/internal/security/password"
+	totpsvc "github.com/owner/auth-server/internal/security/totp"
 )
 
 var (
@@ -34,15 +40,24 @@ var (
 	ErrAccountLocked      = errors.New("tài khoản bị khóa tạm thời, vui lòng thử lại sau 30 phút")
 	ErrAccountInactive    = errors.New("tài khoản không hoạt động")
 	ErrTokenRevoked       = errors.New("phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại")
+	ErrOTPRequired        = errors.New("cần xác thực OTP cho thiết bị hoặc phiên đăng nhập này")
 )
 
 // ─── DTOs (shared across usecases) ───────────────────────────────────────────
 
 type LoginRequest struct {
-	Username  string `json:"username" binding:"required,min=3"`
-	Password  string `json:"password" binding:"required,min=6"`
-	IPAddress string `json:"-"`
-	UserAgent string `json:"-"`
+	Username          string `json:"username" binding:"required,min=3"`
+	Password          string `json:"password" binding:"required,min=6"`
+	ClientID          string `json:"client_id"`
+	ClientSecret      string `json:"client_secret"`
+	GrantType         string `json:"grant_type"`
+	Channel           string `json:"channel"`
+	DeviceName        string `json:"device_name"`
+	DeviceFingerprint string `json:"device_fingerprint"`
+	OTPCode           string `json:"otp_code"`
+	TrustDevice       bool   `json:"trust_device"`
+	IPAddress         string `json:"-"`
+	UserAgent         string `json:"-"`
 }
 
 type LoginResponse struct {
@@ -54,6 +69,11 @@ type LoginResponse struct {
 	PasswordChangeReason string   `json:"password_change_reason,omitempty"`
 }
 
+type StepUpResponse struct {
+	StepUpToken string    `json:"step_up_token"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
 type UserInfo struct {
 	ID                uint       `json:"id"`
 	Username          string     `json:"username"`
@@ -63,6 +83,9 @@ type UserInfo struct {
 	Status            string     `json:"status"`
 	Roles             []string   `json:"roles"`
 	Permissions       []string   `json:"permissions"`
+	AllowedClients    []string   `json:"allowed_clients"`
+	AllowedChannels   []string   `json:"allowed_channels"`
+	EmailVerified     bool       `json:"email_verified"`
 	PasswordExpiresAt *time.Time `json:"password_expires_at,omitempty"`
 	OneTimePassword   bool       `json:"one_time_password"`
 	RequireOTP        bool       `json:"require_otp"`
@@ -77,6 +100,18 @@ type AuthUsecase struct {
 	permRepo  domain.PermissionRepository
 	authRepo  domain.AuthHistoryRepository
 	jwt       *jwtpkg.Service
+}
+
+type sessionContext struct {
+	SessionID         string
+	TokenFamily       string
+	ClientID          string
+	DeviceName        string
+	DeviceFingerprint string
+	IPAddress         string
+	UserAgent         string
+	Trusted           bool
+	RotatedFrom       string
 }
 
 func NewAuthUsecase(
@@ -109,7 +144,13 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 		uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "locked", "Tài khoản đang bị khóa")
 		return nil, ErrAccountLocked
 	}
-	if err = bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+	clientID, channel, deviceName, deviceFingerprint, err := validateClientAccess(user, req)
+	if err != nil {
+		uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", err.Error())
+		return nil, err
+	}
+	passwordOK, needsRehash, err := passwordsvc.Verify(user.PasswordHash, req.Password)
+	if err != nil || !passwordOK {
 		failed := user.FailedLogins + 1
 		var lockUntil *time.Time
 		note := "Sai mật khẩu"
@@ -125,9 +166,56 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 		}
 		return nil, ErrInvalidCredentials
 	}
+	trustedDevice := false
+	if deviceFingerprint != "" {
+		if _, err := uc.tokenRepo.FindTrustedDevice(user.ID, clientID, deviceFingerprint); err == nil {
+			trustedDevice = true
+		}
+	}
+	if user.TwoFactorEnabled {
+		if strings.TrimSpace(req.OTPCode) == "" {
+			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Thiếu mã TOTP")
+			return nil, ErrOTPRequired
+		}
+		if !totpsvc.ValidateCode(user.TOTPSecret, strings.TrimSpace(req.OTPCode), time.Now()) {
+			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Mã TOTP không hợp lệ")
+			return nil, errors.New("mã OTP không hợp lệ")
+		}
+	} else if user.RequireOTP && !trustedDevice {
+		if strings.TrimSpace(req.OTPCode) == "" {
+			if err := uc.issueEmailOTP(user, "login"); err != nil {
+				return nil, err
+			}
+			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Đã gửi email OTP cho thiết bị mới hoặc không tin cậy")
+			return nil, ErrOTPRequired
+		}
+		if !verifyOneTimeCode(user.EmailOTPHash, user.EmailOTPExpiresAt, strings.TrimSpace(req.OTPCode)) {
+			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Email OTP không hợp lệ")
+			return nil, errors.New("mã OTP không hợp lệ")
+		}
+		user.EmailOTPHash = ""
+		user.EmailOTPExpiresAt = nil
+		_ = uc.userRepo.Save(user)
+	}
+	if needsRehash {
+		if rehashed, hashErr := passwordsvc.Hash(req.Password); hashErr == nil {
+			user.PasswordHash = rehashed
+			user.PasswordHistory = appendPasswordHistory(user.PasswordHistory, rehashed)
+			_ = uc.userRepo.Save(user)
+		}
+	}
 	uc.userRepo.UpdateLastLogin(user.ID)
 	uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "success", "")
-	return uc.buildLoginResponse(user)
+	return uc.buildLoginResponse(user, sessionContext{
+		SessionID:         generateOpaqueID(16),
+		TokenFamily:       generateOpaqueID(16),
+		ClientID:          clientID,
+		DeviceName:        fmt.Sprintf("%s [%s]", deviceName, channel),
+		DeviceFingerprint: deviceFingerprint,
+		IPAddress:         req.IPAddress,
+		UserAgent:         req.UserAgent,
+		Trusted:           trustedDevice || req.TrustDevice,
+	})
 }
 
 func (uc *AuthUsecase) recordLoginHistory(userID uint, username, ip, ua, status, note string) {
@@ -150,16 +238,35 @@ func (uc *AuthUsecase) RefreshToken(refreshTokenStr string) (*LoginResponse, err
 	if err != nil || stored.ExpiresAt.Before(time.Now()) {
 		return nil, ErrTokenRevoked
 	}
-	uc.tokenRepo.RevokeToken(refreshTokenStr)
+	if stored.Revoked {
+		if stored.TokenFamily != "" {
+			_ = uc.tokenRepo.RevokeFamily(stored.TokenFamily, "refresh_token_reuse_detected")
+		}
+		return nil, ErrTokenRevoked
+	}
+	_ = uc.tokenRepo.RevokeToken(refreshTokenStr)
 
 	user, err := uc.userRepo.FindByID(claims.UserID)
 	if err != nil {
 		return nil, ErrTokenRevoked
 	}
-	return uc.buildLoginResponse(user)
+	return uc.buildLoginResponse(user, sessionContext{
+		SessionID:         stored.SessionID,
+		TokenFamily:       stored.TokenFamily,
+		ClientID:          stored.ClientID,
+		DeviceName:        stored.DeviceName,
+		DeviceFingerprint: stored.DeviceFingerprint,
+		IPAddress:         stored.IPAddress,
+		UserAgent:         stored.UserAgent,
+		Trusted:           stored.Trusted,
+		RotatedFrom:       stored.Token,
+	})
 }
 
-func (uc *AuthUsecase) Logout(userID uint) error {
+func (uc *AuthUsecase) Logout(userID uint, sessionID string) error {
+	if sessionID != "" {
+		return uc.tokenRepo.RevokeSession(userID, sessionID)
+	}
 	return uc.tokenRepo.RevokeByUserID(userID)
 }
 
@@ -178,6 +285,9 @@ func (uc *AuthUsecase) Me(userID uint) (*UserInfo, error) {
 		Status:            user.Status,
 		Roles:             roleNames(user),
 		Permissions:       ps.List(),
+		AllowedClients:    user.AllowedClients,
+		AllowedChannels:   user.AllowedChannels,
+		EmailVerified:     user.EmailVerified,
 		PasswordExpiresAt: user.PasswordExpiresAt,
 		OneTimePassword:   user.OneTimePassword,
 		RequireOTP:        user.RequireOTP,
@@ -190,13 +300,14 @@ func (uc *AuthUsecase) ChangePassword(userID uint, oldPw, newPw string) error {
 	if err != nil {
 		return errors.New("người dùng không tồn tại")
 	}
-	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPw)) != nil {
+	passwordOK, _, verifyErr := passwordsvc.Verify(user.PasswordHash, oldPw)
+	if verifyErr != nil || !passwordOK {
 		return errors.New("mật khẩu cũ không đúng")
 	}
 	if err := validatePasswordPolicy(user, newPw); err != nil {
 		return err
 	}
-	hash, _ := bcrypt.GenerateFromPassword([]byte(newPw), bcrypt.DefaultCost)
+	hash, _ := passwordsvc.Hash(newPw)
 	user.PasswordHash = string(hash)
 	user.PasswordHistory = appendPasswordHistory(user.PasswordHistory, user.PasswordHash)
 	user.OneTimePassword = false
@@ -207,9 +318,18 @@ func (uc *AuthUsecase) ChangePassword(userID uint, oldPw, newPw string) error {
 	return uc.userRepo.Save(user)
 }
 
-func (uc *AuthUsecase) buildLoginResponse(user *domain.User) (*LoginResponse, error) {
+func (uc *AuthUsecase) buildLoginResponse(user *domain.User, session sessionContext) (*LoginResponse, error) {
 	ps := user.EffectivePermissions()
 	roles := roleNames(user)
+	if session.SessionID == "" {
+		session.SessionID = generateOpaqueID(16)
+	}
+	if session.TokenFamily == "" {
+		session.TokenFamily = generateOpaqueID(16)
+	}
+	if session.ClientID == "" {
+		session.ClientID = "web_portal"
+	}
 	passwordExpired := user.PasswordExpiresAt != nil && !user.PasswordExpiresAt.After(time.Now())
 	mustChangePassword := user.OneTimePassword || passwordExpired
 	passwordChangeReason := ""
@@ -219,15 +339,29 @@ func (uc *AuthUsecase) buildLoginResponse(user *domain.User) (*LoginResponse, er
 		passwordChangeReason = "password_expired"
 	}
 
-	accessToken, err := uc.jwt.GenerateAccessToken(user.ID, user.Username, roles)
+	accessToken, err := uc.jwt.GenerateAccessToken(user.ID, user.Username, roles, session.SessionID, session.ClientID)
 	if err != nil {
 		return nil, err
 	}
-	refreshStr, expiry, err := uc.jwt.GenerateRefreshToken(user.ID, user.Username)
+	refreshStr, expiry, err := uc.jwt.GenerateRefreshToken(user.ID, user.Username, session.SessionID, session.ClientID)
 	if err != nil {
 		return nil, err
 	}
-	uc.tokenRepo.Save(&domain.RefreshToken{UserID: user.ID, Token: refreshStr, ExpiresAt: expiry})
+	uc.tokenRepo.Save(&domain.RefreshToken{
+		UserID:            user.ID,
+		Token:             refreshStr,
+		SessionID:         session.SessionID,
+		TokenFamily:       session.TokenFamily,
+		ClientID:          session.ClientID,
+		DeviceName:        session.DeviceName,
+		DeviceFingerprint: session.DeviceFingerprint,
+		IPAddress:         session.IPAddress,
+		UserAgent:         session.UserAgent,
+		Trusted:           session.Trusted,
+		RotatedFrom:       session.RotatedFrom,
+		ExpiresAt:         expiry,
+		LastUsedAt:        time.Now(),
+	})
 
 	return &LoginResponse{
 		AccessToken:          accessToken,
@@ -244,6 +378,9 @@ func (uc *AuthUsecase) buildLoginResponse(user *domain.User) (*LoginResponse, er
 			Status:            user.Status,
 			Roles:             roles,
 			Permissions:       ps.List(),
+			AllowedClients:    user.AllowedClients,
+			AllowedChannels:   user.AllowedChannels,
+			EmailVerified:     user.EmailVerified,
 			PasswordExpiresAt: user.PasswordExpiresAt,
 			OneTimePassword:   user.OneTimePassword,
 			RequireOTP:        user.RequireOTP,
@@ -257,6 +394,8 @@ type SessionResponse struct {
 	Device     string `json:"device"`
 	IP         string `json:"ip"`
 	Location   string `json:"location"`
+	ClientID   string `json:"client_id"`
+	Trusted    bool   `json:"trusted"`
 	LastActive string `json:"last_active"`
 	IsCurrent  bool   `json:"is_current"`
 }
@@ -266,47 +405,121 @@ type Setup2FAResponse struct {
 	QRCodeURL string `json:"qr_code_url"`
 }
 
-func (uc *AuthUsecase) ListSessions(userID uint) ([]SessionResponse, error) {
-	return []SessionResponse{
-		{ID: "sess-1", Device: "Chrome on Windows", IP: "192.168.1.10", Location: "Hanoi, VN", LastActive: "Vừa xong", IsCurrent: true},
-		{ID: "sess-2", Device: "Safari on iPhone", IP: "14.232.11.2", Location: "HCMC, VN", LastActive: "2 giờ trước", IsCurrent: false},
-	}, nil
+func (uc *AuthUsecase) ListSessions(userID uint, currentSessionID string) ([]SessionResponse, error) {
+	sessions, err := uc.tokenRepo.ListActiveSessions(userID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]SessionResponse, 0, len(sessions))
+	for _, session := range sessions {
+		result = append(result, SessionResponse{
+			ID:         session.SessionID,
+			Device:     session.DeviceName,
+			IP:         session.IPAddress,
+			Location:   "N/A",
+			ClientID:   session.ClientID,
+			Trusted:    session.Trusted,
+			LastActive: session.LastUsedAt.Format(time.RFC3339),
+			IsCurrent:  session.SessionID == currentSessionID,
+		})
+	}
+	return result, nil
 }
 
 func (uc *AuthUsecase) RevokeSession(userID uint, sessionID string) error {
-	return nil
+	return uc.tokenRepo.RevokeSession(userID, sessionID)
 }
 
 func (uc *AuthUsecase) RevokeAllSessions(userID uint) error {
-	return uc.Logout(userID)
+	return uc.tokenRepo.RevokeByUserID(userID)
 }
 
 func (uc *AuthUsecase) Setup2FA(userID uint) (*Setup2FAResponse, error) {
+	user, err := uc.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("người dùng không tồn tại")
+	}
+	secret, err := totpsvc.GenerateSecret()
+	if err != nil {
+		return nil, err
+	}
+	user.PendingTOTPSecret = secret
+	if err := uc.userRepo.Save(user); err != nil {
+		return nil, err
+	}
+	otpAuth := totpsvc.BuildOTPAuthURL("AMS", user.Email, secret)
 	return &Setup2FAResponse{
-		Secret:    "JBSWY3DPEHPK3PXP",
-		QRCodeURL: "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=otpauth://totp/Admin%3Aadmin%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=Admin",
+		Secret:    secret,
+		QRCodeURL: "https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=" + url.QueryEscape(otpAuth),
 	}, nil
 }
 
 func (uc *AuthUsecase) Verify2FA(userID uint, code string) error {
-	if len(code) != 6 {
+	user, err := uc.userRepo.FindByID(userID)
+	if err != nil {
+		return errors.New("người dùng không tồn tại")
+	}
+	secret := user.PendingTOTPSecret
+	if secret == "" {
+		secret = user.TOTPSecret
+	}
+	if !totpsvc.ValidateCode(secret, strings.TrimSpace(code), time.Now()) {
 		return errors.New("mã OTP không hợp lệ")
 	}
-	user, err := uc.userRepo.FindByID(userID)
-	if err == nil {
-		user.TwoFactorEnabled = true
-		uc.userRepo.Save(user)
-	}
-	return nil
+	user.TOTPSecret = secret
+	user.PendingTOTPSecret = ""
+	user.TwoFactorEnabled = true
+	return uc.userRepo.Save(user)
 }
 
 func (uc *AuthUsecase) Disable2FA(userID uint) error {
 	user, err := uc.userRepo.FindByID(userID)
-	if err == nil {
-		user.TwoFactorEnabled = false
-		uc.userRepo.Save(user)
+	if err != nil {
+		return errors.New("người dùng không tồn tại")
 	}
-	return nil
+	user.TwoFactorEnabled = false
+	user.TOTPSecret = ""
+	user.PendingTOTPSecret = ""
+	return uc.userRepo.Save(user)
+}
+
+func (uc *AuthUsecase) StepUp(userID uint, sessionID, clientID, password, otpCode string) (*StepUpResponse, error) {
+	user, err := uc.userRepo.FindByID(userID)
+	if err != nil {
+		return nil, errors.New("người dùng không tồn tại")
+	}
+	ok, _, err := passwordsvc.Verify(user.PasswordHash, password)
+	if err != nil || !ok {
+		return nil, ErrInvalidCredentials
+	}
+	if user.TwoFactorEnabled {
+		if strings.TrimSpace(otpCode) == "" {
+			return nil, ErrOTPRequired
+		}
+		if !totpsvc.ValidateCode(user.TOTPSecret, strings.TrimSpace(otpCode), time.Now()) {
+			return nil, errors.New("mã OTP không hợp lệ")
+		}
+	} else if user.RequireOTP {
+		if strings.TrimSpace(otpCode) == "" {
+			if err := uc.issueEmailOTP(user, "step_up"); err != nil {
+				return nil, err
+			}
+			return nil, ErrOTPRequired
+		}
+		if !verifyOneTimeCode(user.EmailOTPHash, user.EmailOTPExpiresAt, strings.TrimSpace(otpCode)) {
+			return nil, errors.New("mã OTP không hợp lệ")
+		}
+		user.EmailOTPHash = ""
+		user.EmailOTPExpiresAt = nil
+		if err := uc.userRepo.Save(user); err != nil {
+			return nil, err
+		}
+	}
+	token, expiresAt, err := uc.jwt.GenerateStepUpToken(user.ID, user.Username, sessionID, clientID, 10*time.Minute)
+	if err != nil {
+		return nil, err
+	}
+	return &StepUpResponse{StepUpToken: token, ExpiresAt: expiresAt}, nil
 }
 
 func (uc *AuthUsecase) ForgotPassword(email string) error {
@@ -348,9 +561,13 @@ func (uc *AuthUsecase) ResetPasswordWithToken(token string, newPassword string) 
 	if err != nil {
 		return errors.New("người dùng không tồn tại")
 	}
-
-	hash, _ := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err := validatePasswordPolicy(user, newPassword); err != nil {
+		return err
+	}
+	hash, _ := passwordsvc.Hash(newPassword)
 	user.PasswordHash = string(hash)
+	user.PasswordHistory = appendPasswordHistory(user.PasswordHistory, user.PasswordHash)
+	user.OneTimePassword = false
 
 	if err := uc.userRepo.Save(user); err != nil {
 		return err
@@ -371,18 +588,19 @@ func (uc *AuthUsecase) SendVerificationEmail(userID uint) error {
 	if err != nil {
 		return errors.New("người dùng không tồn tại")
 	}
-
-	// Generate a 6-digit OTP
-	otp := fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
-
-	mockVerifyTokens.Lock()
-	mockVerifyTokens.m[otp] = user.ID
-	mockVerifyTokens.Unlock()
+	otp := generateNumericCode()
+	expiry := time.Now().Add(15 * time.Minute)
+	user.EmailVerifyHash = hashOneTimeCode(otp)
+	user.EmailVerifyExpiry = &expiry
+	if err := uc.userRepo.Save(user); err != nil {
+		return err
+	}
+	token := fmt.Sprintf("%d:%s", user.ID, otp)
 
 	fmt.Printf("\n=======================================================\n")
 	fmt.Printf("📧 [MOCK EMAIL] XÁC MINH TÀI KHOẢN EMAIL\n")
 	fmt.Printf("   Gửi tới: %s\n", user.Email)
-	fmt.Printf("   Mã OTP xác minh của bạn là: %s\n", otp)
+	fmt.Printf("   Mã xác minh của bạn là: %s\n", token)
 	fmt.Printf("   (Nhập mã OTP này trên giao diện web để kích hoạt)\n")
 	fmt.Printf("=======================================================\n\n")
 
@@ -390,30 +608,28 @@ func (uc *AuthUsecase) SendVerificationEmail(userID uint) error {
 }
 
 func (uc *AuthUsecase) VerifyEmail(token string) error {
-	mockVerifyTokens.RLock()
-	userID, ok := mockVerifyTokens.m[token]
-	mockVerifyTokens.RUnlock()
-
-	if !ok {
+	parts := strings.SplitN(strings.TrimSpace(token), ":", 2)
+	if len(parts) != 2 {
 		return errors.New("mã OTP không hợp lệ hoặc đã hết hạn")
 	}
-
-	user, err := uc.userRepo.FindByID(userID)
+	userID64, err := strconv.ParseUint(parts[0], 10, 64)
+	if err != nil {
+		return errors.New("mã OTP không hợp lệ hoặc đã hết hạn")
+	}
+	user, err := uc.userRepo.FindByID(uint(userID64))
 	if err != nil {
 		return errors.New("người dùng không tồn tại")
 	}
-
-	// Set user status to active (or mark email as verified)
+	if !verifyOneTimeCode(user.EmailVerifyHash, user.EmailVerifyExpiry, parts[1]) {
+		return errors.New("mã OTP không hợp lệ hoặc đã hết hạn")
+	}
+	user.EmailVerified = true
+	user.EmailVerifyHash = ""
+	user.EmailVerifyExpiry = nil
 	user.Status = "active"
-
 	if err := uc.userRepo.Save(user); err != nil {
 		return err
 	}
-
-	mockVerifyTokens.Lock()
-	delete(mockVerifyTokens.m, token)
-	mockVerifyTokens.Unlock()
-
 	return nil
 }
 
@@ -431,6 +647,8 @@ type CreateUserReq struct {
 	OneTimePassword   bool       `json:"one_time_password"`
 	RequireOTP        bool       `json:"require_otp"`
 	TwoFactorEnabled  bool       `json:"two_factor_enabled"`
+	AllowedClients    []string   `json:"allowed_clients"`
+	AllowedChannels   []string   `json:"allowed_channels"`
 }
 
 type UpdateUserReq struct {
@@ -443,6 +661,8 @@ type UpdateUserReq struct {
 	OneTimePassword   bool       `json:"one_time_password"`
 	RequireOTP        bool       `json:"require_otp"`
 	TwoFactorEnabled  bool       `json:"two_factor_enabled"`
+	AllowedClients    []string   `json:"allowed_clients"`
+	AllowedChannels   []string   `json:"allowed_channels"`
 }
 
 type UserResponse struct {
@@ -450,6 +670,7 @@ type UserResponse struct {
 	Username          string     `json:"username"`
 	FullName          string     `json:"full_name"`
 	Email             string     `json:"email"`
+	EmailVerified     bool       `json:"email_verified"`
 	Phone             string     `json:"phone"`
 	Status            string     `json:"status"`
 	Roles             []string   `json:"roles"`
@@ -458,6 +679,8 @@ type UserResponse struct {
 	OneTimePassword   bool       `json:"one_time_password"`
 	RequireOTP        bool       `json:"require_otp"`
 	TwoFactorEnabled  bool       `json:"two_factor_enabled"`
+	AllowedClients    []string   `json:"allowed_clients"`
+	AllowedChannels   []string   `json:"allowed_channels"`
 }
 
 type PaginatedResult[T any] struct {
@@ -509,11 +732,13 @@ func (uc *UserUsecase) Create(req *CreateUserReq) (*UserResponse, error) {
 		OneTimePassword:   req.OneTimePassword,
 		RequireOTP:        req.RequireOTP,
 		TwoFactorEnabled:  req.TwoFactorEnabled,
+		AllowedClients:    req.AllowedClients,
+		AllowedChannels:   req.AllowedChannels,
 	}
 	if err := validatePasswordPolicy(u, req.Password); err != nil {
 		return nil, err
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hash, err := passwordsvc.Hash(req.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -547,6 +772,9 @@ func (uc *UserUsecase) Update(id uint, req *UpdateUserReq) (*UserResponse, error
 		u.FullName = req.FullName
 	}
 	if req.Email != "" {
+		if !strings.EqualFold(u.Email, req.Email) {
+			u.EmailVerified = false
+		}
 		u.Email = req.Email
 	}
 	if req.Phone != "" {
@@ -559,6 +787,16 @@ func (uc *UserUsecase) Update(id uint, req *UpdateUserReq) (*UserResponse, error
 	u.OneTimePassword = req.OneTimePassword
 	u.RequireOTP = req.RequireOTP
 	u.TwoFactorEnabled = req.TwoFactorEnabled
+	if !req.TwoFactorEnabled {
+		u.TOTPSecret = ""
+		u.PendingTOTPSecret = ""
+	}
+	if req.AllowedClients != nil {
+		u.AllowedClients = req.AllowedClients
+	}
+	if req.AllowedChannels != nil {
+		u.AllowedChannels = req.AllowedChannels
+	}
 	if err = uc.repo.Save(u); err != nil {
 		return nil, err
 	}
@@ -583,7 +821,7 @@ func (uc *UserUsecase) ResetPassword(id uint, newPassword string, oneTimePasswor
 	if err := validatePasswordPolicy(u, newPassword); err != nil {
 		return err
 	}
-	hash, _ := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	hash, _ := passwordsvc.Hash(newPassword)
 	u.PasswordHash = string(hash)
 	u.PasswordHistory = appendPasswordHistory(u.PasswordHistory, u.PasswordHash)
 	u.OneTimePassword = oneTimePassword
@@ -901,12 +1139,14 @@ func userToResponse(u *domain.User) UserResponse {
 	}
 	return UserResponse{
 		ID: u.ID, Username: u.Username, FullName: u.FullName,
-		Email: u.Email, Phone: u.Phone, Status: u.Status,
+		Email: u.Email, EmailVerified: u.EmailVerified, Phone: u.Phone, Status: u.Status,
 		Roles: roles, RoleIDs: ids,
 		PasswordExpiresAt: u.PasswordExpiresAt,
 		OneTimePassword:   u.OneTimePassword,
 		RequireOTP:        u.RequireOTP,
 		TwoFactorEnabled:  u.TwoFactorEnabled,
+		AllowedClients:    u.AllowedClients,
+		AllowedChannels:   u.AllowedChannels,
 	}
 }
 
@@ -979,12 +1219,14 @@ func validatePasswordPolicy(user *domain.User, password string) error {
 		return errors.New("mật khẩu phải gồm chữ hoa, chữ thường, số và ký tự đặc biệt")
 	}
 
-	if user.PasswordHash != "" && bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) == nil {
-		return errors.New("mật khẩu mới không được trùng với các mật khẩu đã dùng gần đây")
+	if user.PasswordHash != "" {
+		if ok, _, err := passwordsvc.Verify(user.PasswordHash, password); err == nil && ok {
+			return errors.New("mật khẩu mới không được trùng với các mật khẩu đã dùng gần đây")
+		}
 	}
 
 	for _, oldHash := range user.PasswordHistory {
-		if bcrypt.CompareHashAndPassword([]byte(oldHash), []byte(password)) == nil {
+		if ok, _, err := passwordsvc.Verify(oldHash, password); err == nil && ok {
 			return errors.New("mật khẩu mới không được trùng với các mật khẩu đã dùng gần đây")
 		}
 	}
@@ -998,6 +1240,100 @@ func appendPasswordHistory(history []string, hash string) []string {
 		next = next[len(next)-passwordHistoryLimit:]
 	}
 	return next
+}
+
+func generateOpaqueID(size int) string {
+	buffer := make([]byte, size)
+	_, _ = rand.Read(buffer)
+	return hex.EncodeToString(buffer)
+}
+
+func generateNumericCode() string {
+	return fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
+}
+
+func hashOneTimeCode(code string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(code)))
+	return hex.EncodeToString(sum[:])
+}
+
+func verifyOneTimeCode(storedHash string, expiresAt *time.Time, code string) bool {
+	if strings.TrimSpace(storedHash) == "" || expiresAt == nil || expiresAt.Before(time.Now()) {
+		return false
+	}
+	return storedHash == hashOneTimeCode(code)
+}
+
+func (uc *AuthUsecase) issueEmailOTP(user *domain.User, reason string) error {
+	otp := generateNumericCode()
+	expiry := time.Now().Add(10 * time.Minute)
+	user.EmailOTPHash = hashOneTimeCode(otp)
+	user.EmailOTPExpiresAt = &expiry
+	if err := uc.userRepo.Save(user); err != nil {
+		return err
+	}
+	fmt.Printf("\n=======================================================\n")
+	fmt.Printf("📧 [MOCK EMAIL OTP] XÁC THỰC %s\n", strings.ToUpper(reason))
+	fmt.Printf("   Gửi tới: %s\n", user.Email)
+	fmt.Printf("   Mã OTP của bạn là: %s\n", otp)
+	fmt.Printf("   Hiệu lực đến: %s\n", expiry.Format(time.RFC3339))
+	fmt.Printf("=======================================================\n\n")
+	return nil
+}
+
+func containsOrEmpty(haystack []string, needle string) bool {
+	if len(haystack) == 0 || needle == "" {
+		return true
+	}
+	for _, item := range haystack {
+		if strings.EqualFold(item, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateClientAccess(user *domain.User, req *LoginRequest) (string, string, string, string, error) {
+	clientID := strings.TrimSpace(req.ClientID)
+	if clientID == "" {
+		clientID = "web_portal"
+	}
+	client, ok := clientpolicy.Get(clientID)
+	if !ok {
+		return "", "", "", "", errors.New("client_id không hợp lệ hoặc chưa được đăng ký")
+	}
+	grantType := strings.TrimSpace(req.GrantType)
+	if grantType == "" {
+		grantType = "password"
+	}
+	if !containsOrEmpty(client.GrantTypes, grantType) {
+		return "", "", "", "", errors.New("grant_type không được hỗ trợ cho client này")
+	}
+	if !client.Public && strings.TrimSpace(req.ClientSecret) != client.Secret {
+		return "", "", "", "", errors.New("client_secret không hợp lệ")
+	}
+	channel := strings.TrimSpace(req.Channel)
+	if channel == "" && len(client.Channels) > 0 {
+		channel = client.Channels[0]
+	}
+	if !containsOrEmpty(client.Channels, channel) {
+		return "", "", "", "", errors.New("channel không hợp lệ cho client này")
+	}
+	if !containsOrEmpty(user.AllowedClients, clientID) {
+		return "", "", "", "", errors.New("tài khoản này không được phép đăng nhập vào client hiện tại")
+	}
+	if !containsOrEmpty(user.AllowedChannels, channel) {
+		return "", "", "", "", errors.New("tài khoản này không được phép đăng nhập qua kênh hiện tại")
+	}
+	deviceName := strings.TrimSpace(req.DeviceName)
+	if deviceName == "" {
+		deviceName = "Unknown device"
+	}
+	deviceFingerprint := strings.TrimSpace(req.DeviceFingerprint)
+	if deviceFingerprint == "" {
+		deviceFingerprint = fmt.Sprintf("%s|%s|%s", clientID, req.IPAddress, req.UserAgent)
+	}
+	return clientID, channel, deviceName, deviceFingerprint, nil
 }
 
 // ─── Log Usecase ─────────────────────────────────────────────────────────────

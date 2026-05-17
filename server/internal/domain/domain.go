@@ -15,6 +15,15 @@ type User struct {
 	Username          string
 	PasswordHash      string
 	PasswordHistory   []string
+	AllowedClients    []string
+	AllowedChannels   []string
+	EmailVerified     bool
+	EmailOTPHash      string
+	EmailOTPExpiresAt *time.Time
+	EmailVerifyHash   string
+	EmailVerifyExpiry *time.Time
+	TOTPSecret        string
+	PendingTOTPSecret string
 	Email             string
 	FullName          string
 	Phone             string
@@ -135,12 +144,24 @@ type PermissionLine struct {
 // ─── RefreshToken ─────────────────────────────────────────────────────────────
 
 type RefreshToken struct {
-	ID        uint
-	UserID    uint
-	Token     string
-	ExpiresAt time.Time
-	Revoked   bool
-	CreatedAt time.Time
+	ID                uint
+	UserID            uint
+	Token             string
+	SessionID         string
+	TokenFamily       string
+	ClientID          string
+	DeviceName        string
+	DeviceFingerprint string
+	IPAddress         string
+	UserAgent         string
+	Trusted           bool
+	RotatedFrom       string
+	RevokedReason     string
+	ExpiresAt         time.Time
+	LastUsedAt        time.Time
+	ReuseDetectedAt   *time.Time
+	Revoked           bool
+	CreatedAt         time.Time
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────
@@ -222,6 +243,10 @@ type TokenRepository interface {
 	FindByToken(token string) (*RefreshToken, error)
 	RevokeByUserID(userID uint) error
 	RevokeToken(token string) error
+	RevokeSession(userID uint, sessionID string) error
+	RevokeFamily(familyID string, reason string) error
+	ListActiveSessions(userID uint) ([]*RefreshToken, error)
+	FindTrustedDevice(userID uint, clientID, fingerprint string) (*RefreshToken, error)
 }
 
 // AuditRepository for audit logging

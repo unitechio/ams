@@ -69,6 +69,8 @@ func Authenticate(jwtSvc *jwtpkg.Service, loader PermissionLoader) gin.HandlerFu
 		// Inject into Gin context
 		c.Set("userID", claims.UserID)
 		c.Set("username", claims.Username)
+		c.Set("sessionID", claims.SessionID)
+		c.Set("clientID", claims.ClientID)
 		c.Set("permissionSet", ps)
 
 		// Also inject into request context for use in service/usecase layer
@@ -179,6 +181,50 @@ func GetUsername(c *gin.Context) string {
 	val, _ := c.Get("username")
 	s, _ := val.(string)
 	return s
+}
+
+func GetSessionID(c *gin.Context) string {
+	val, _ := c.Get("sessionID")
+	s, _ := val.(string)
+	return s
+}
+
+func GetClientID(c *gin.Context) string {
+	val, _ := c.Get("clientID")
+	s, _ := val.(string)
+	return s
+}
+
+func RequireStepUp(jwtSvc *jwtpkg.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tokenStr := strings.TrimSpace(c.GetHeader("X-Step-Up-Token"))
+		if tokenStr == "" {
+			c.AbortWithStatusJSON(http.StatusPreconditionRequired, gin.H{
+				"success": false,
+				"error":   "Cần xác thực lại để thực hiện thao tác nhạy cảm",
+				"code":    "STEP_UP_REQUIRED",
+			})
+			return
+		}
+		claims, err := jwtSvc.ValidateToken(tokenStr)
+		if err != nil || claims.Purpose != "step_up" {
+			c.AbortWithStatusJSON(http.StatusPreconditionRequired, gin.H{
+				"success": false,
+				"error":   "Phiên xác thực nâng cao không hợp lệ hoặc đã hết hạn",
+				"code":    "STEP_UP_REQUIRED",
+			})
+			return
+		}
+		if claims.UserID != GetUserID(c) || claims.SessionID != GetSessionID(c) || claims.ClientID != GetClientID(c) {
+			c.AbortWithStatusJSON(http.StatusPreconditionRequired, gin.H{
+				"success": false,
+				"error":   "Phiên xác thực nâng cao không khớp với phiên hiện tại",
+				"code":    "STEP_UP_REQUIRED",
+			})
+			return
+		}
+		c.Next()
+	}
 }
 
 func GetScope(c *gin.Context) permission.Scope {

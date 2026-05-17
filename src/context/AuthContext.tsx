@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { authApi, setToken, onUnauthorized, type UserInfo, type LoginResponse } from '@/lib/api';
+import { authApi, setToken, setStepUpToken, onUnauthorized, type UserInfo, type LoginResponse } from '@/lib/api';
 import { initPermissionService, clearPermissionService } from '@/auth/permissionService';
 
 interface AuthContextValue {
@@ -9,7 +9,16 @@ interface AuthContextValue {
   mustChangePassword: boolean;
   passwordChangeReason: 'one_time_password' | 'password_expired' | null;
   clearMustChangePassword: () => void;
-  login: (username: string, password: string) => Promise<LoginResponse>;
+  login: (username: string, password: string, options?: {
+    client_id?: string;
+    client_secret?: string;
+    grant_type?: string;
+    channel?: string;
+    device_name?: string;
+    device_fingerprint?: string;
+    otp_code?: string;
+    trust_device?: boolean;
+  }) => Promise<LoginResponse>;
   logout: () => void;
   hasRole: (role: string) => boolean;
 }
@@ -24,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     setToken(null);
+    setStepUpToken(null);
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('access_token');
     setUser(null);
@@ -59,9 +69,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setIsLoading(false));
   }, [logout]);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const resp: LoginResponse = await authApi.login(username, password);
+  const login = useCallback(async (username: string, password: string, options?: {
+    client_id?: string;
+    client_secret?: string;
+    grant_type?: string;
+    channel?: string;
+    device_name?: string;
+    device_fingerprint?: string;
+    otp_code?: string;
+    trust_device?: boolean;
+  }) => {
+    const resp: LoginResponse = await authApi.login(username, password, options);
     setToken(resp.access_token);
+    setStepUpToken(null);
     localStorage.setItem('access_token', resp.access_token);
     localStorage.setItem('refresh_token', resp.refresh_token);
     setUser(resp.user);

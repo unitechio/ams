@@ -5,7 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { authApi } from '@/lib/api';
+import { authApi, type SSOProvider } from '@/lib/api';
+import { DEFAULT_AUTH_CLIENT, getDeviceFingerprint, getDeviceName } from '@/lib/device';
 
 export default function LoginPage() {
   const { login, mustChangePassword, passwordChangeReason, clearMustChangePassword } = useAuth();
@@ -20,6 +21,8 @@ export default function LoginPage() {
   
   // 2FA State
   const [otp, setOtp] = useState('');
+  const [trustDevice, setTrustDevice] = useState(true);
+  const [otpPrompt, setOtpPrompt] = useState<'email' | 'totp'>('totp');
   
   // Forgot Password State
   const [email, setEmail] = useState('');
@@ -34,11 +37,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [failCount, setFailCount] = useState(0);
+  const [ssoProviders, setSSOProviders] = useState<SSOProvider[]>([]);
 
   // When AuthContext signals mustChangePassword (e.g. after successful login)
   useEffect(() => {
     if (mustChangePassword) setStep('change_password');
   }, [mustChangePassword]);
+
+  useEffect(() => {
+    authApi.ssoProviders().then(setSSOProviders).catch(() => setSSOProviders([]));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,25 +59,31 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      if (username === 'superadmin' && step === 'login') {
-        setStep('2fa');
-        setLoading(false);
-        return;
-      }
-
       if (step === '2fa') {
         if (otp.length !== 6) throw new Error('Mã OTP không hợp lệ');
       }
 
-      const resp = await login(username, password);
+      const resp = await login(username, password, {
+        ...DEFAULT_AUTH_CLIENT,
+        device_name: getDeviceName(),
+        device_fingerprint: getDeviceFingerprint(),
+        otp_code: step === '2fa' ? otp : undefined,
+        trust_device: trustDevice,
+      });
       if (resp.must_change_password || resp.password_expired || resp.one_time_password || resp.require_password_change) {
         setStep('change_password');
         return;
       }
       navigate('/');
     } catch (err: unknown) {
-      setFailCount(f => f + 1);
       const msg = err instanceof Error ? err.message : 'Đăng nhập thất bại';
+      if (msg.toLowerCase().includes('otp')) {
+        setOtpPrompt(msg.toLowerCase().includes('thiết bị') ? 'email' : 'totp');
+        setStep('2fa');
+        setError(msg);
+        return;
+      }
+      setFailCount(f => f + 1);
       // Map common backend error messages to Vietnamese
       if (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('incorrect') || msg.toLowerCase().includes('wrong')) {
         setError('Tên đăng nhập hoặc mật khẩu không chính xác.');
@@ -192,8 +206,36 @@ export default function LoginPage() {
                 {loading ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Đang xử lý...</> : 'Đăng nhập'}
               </Button>
 
+              <label className="flex items-center gap-2 text-xs text-slate-500">
+                <input
+                  type="checkbox"
+                  checked={trustDevice}
+                  onChange={(e) => setTrustDevice(e.target.checked)}
+                  className="rounded border-slate-300"
+                />
+                Ghi nhớ thiết bị này để giảm yêu cầu OTP cho các lần đăng nhập sau
+              </label>
+
               {/* Demo accounts */}
               <div className="border-t border-gray-100 pt-4">
+                {ssoProviders.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    {ssoProviders.map((provider) => (
+                      <Button
+                        key={provider.id}
+                        type="button"
+                        variant="outline"
+                        className="w-full h-10"
+                        onClick={async () => {
+                          const { redirect_url } = await authApi.startSSO(provider.id);
+                          window.location.href = redirect_url;
+                        }}
+                      >
+                        Đăng nhập với {provider.name}
+                      </Button>
+                    ))}
+                  </div>
+                )}
                 <p className="text-xs text-gray-400 text-center mb-3">Tài khoản demo</p>
                 <div className="grid grid-cols-3 gap-2">
                   {[
@@ -222,7 +264,11 @@ export default function LoginPage() {
                   <Fingerprint className="w-6 h-6 text-slate-600" />
                 </div>
                 <h2 className="text-lg font-semibold text-slate-800">Xác thực 2 bước</h2>
-                <p className="text-sm text-slate-500 mt-1">Vui lòng nhập mã OTP từ ứng dụng Authenticator của bạn để tiếp tục.</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  {otpPrompt === 'email'
+                    ? 'Mã OTP đã được gửi tới email của bạn. Nhập mã để xác minh thiết bị đăng nhập.'
+                    : 'Vui lòng nhập mã OTP từ ứng dụng Authenticator của bạn để tiếp tục.'}
+                </p>
               </div>
 
               <div className="space-y-1.5">

@@ -10,6 +10,15 @@ type GormUser struct {
 	Username            string `gorm:"uniqueIndex;size:100;not null"`
 	PasswordHash        string `gorm:"size:255;not null"`
 	PasswordHistoryJSON string `gorm:"type:text;default:'[]'"`
+	AllowedClientsJSON  string `gorm:"type:text;default:'[]'"`
+	AllowedChannelsJSON string `gorm:"type:text;default:'[]'"`
+	EmailVerified       bool   `gorm:"default:false"`
+	EmailOTPHash        string `gorm:"size:255;default:''"`
+	EmailOTPExpiresAt   *time.Time
+	EmailVerifyHash     string `gorm:"size:255;default:''"`
+	EmailVerifyExpiry   *time.Time
+	TOTPSecret          string `gorm:"size:255;default:''"`
+	PendingTOTPSecret   string `gorm:"size:255;default:''"`
 	Email               string `gorm:"uniqueIndex;size:200"`
 	FullName            string `gorm:"size:200;not null;default:''"`
 	Phone               string `gorm:"size:20;default:''"`
@@ -98,12 +107,24 @@ type GormMenu struct {
 func (GormMenu) TableName() string { return "sys_menus" }
 
 type GormRefreshToken struct {
-	ID        uint      `gorm:"primaryKey;autoIncrement"`
-	UserID    uint      `gorm:"not null;index"`
-	Token     string    `gorm:"uniqueIndex;size:512;not null"`
-	ExpiresAt time.Time `gorm:"not null"`
-	Revoked   bool      `gorm:"default:false"`
-	CreatedAt time.Time
+	ID                uint      `gorm:"primaryKey;autoIncrement"`
+	UserID            uint      `gorm:"not null;index"`
+	Token             string    `gorm:"uniqueIndex;size:512;not null"`
+	SessionID         string    `gorm:"size:128;index"`
+	TokenFamily       string    `gorm:"size:128;index"`
+	ClientID          string    `gorm:"size:128;index"`
+	DeviceName        string    `gorm:"size:255;default:''"`
+	DeviceFingerprint string    `gorm:"size:255;index;default:''"`
+	IPAddress         string    `gorm:"size:50;default:''"`
+	UserAgent         string    `gorm:"size:500;default:''"`
+	Trusted           bool      `gorm:"default:false"`
+	RotatedFrom       string    `gorm:"size:512;default:''"`
+	RevokedReason     string    `gorm:"size:255;default:''"`
+	ExpiresAt         time.Time `gorm:"not null"`
+	LastUsedAt        time.Time
+	ReuseDetectedAt   *time.Time
+	Revoked           bool `gorm:"default:false"`
+	CreatedAt         time.Time
 }
 
 func (GormRefreshToken) TableName() string { return "sys_refresh_tokens" }

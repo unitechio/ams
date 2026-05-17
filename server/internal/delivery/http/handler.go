@@ -9,6 +9,7 @@ import (
 	"github.com/owner/auth-server/internal/authorization/specification"
 	"github.com/owner/auth-server/internal/domain"
 	"github.com/owner/auth-server/internal/middleware"
+	"github.com/owner/auth-server/internal/security/sso"
 	"github.com/owner/auth-server/internal/usecase"
 )
 
@@ -86,8 +87,22 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	ok(c, resp)
 }
 
+func (h *AuthHandler) SSOProviders(c *gin.Context) {
+	ok(c, sso.List())
+}
+
+func (h *AuthHandler) StartSSO(c *gin.Context) {
+	state := c.DefaultQuery("state", "ams-web")
+	redirectURL, err := sso.StartURL(c.Param("provider"), state)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	ok(c, gin.H{"redirect_url": redirectURL})
+}
+
 func (h *AuthHandler) Logout(c *gin.Context) {
-	h.uc.Logout(middleware.GetUserID(c))
+	h.uc.Logout(middleware.GetUserID(c), middleware.GetSessionID(c))
 	ok(c, gin.H{"message": "Đã đăng xuất thành công"})
 }
 
@@ -117,7 +132,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 }
 
 func (h *AuthHandler) Sessions(c *gin.Context) {
-	sessions, err := h.uc.ListSessions(middleware.GetUserID(c))
+	sessions, err := h.uc.ListSessions(middleware.GetUserID(c), middleware.GetSessionID(c))
 	if err != nil {
 		fail(c, http.StatusInternalServerError, err.Error())
 		return
@@ -211,6 +226,27 @@ func (h *AuthHandler) SendVerificationEmail(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"message": "Email xác minh đã được gửi"})
+}
+
+func (h *AuthHandler) StepUp(c *gin.Context) {
+	var body struct {
+		Password string `json:"password" binding:"required"`
+		OTPCode  string `json:"otp_code"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	resp, err := h.uc.StepUp(middleware.GetUserID(c), middleware.GetSessionID(c), middleware.GetClientID(c), body.Password, body.OTPCode)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if err == usecase.ErrOTPRequired {
+			status = http.StatusPreconditionRequired
+		}
+		fail(c, status, err.Error())
+		return
+	}
+	ok(c, resp)
 }
 
 func (h *AuthHandler) VerifyEmail(c *gin.Context) {

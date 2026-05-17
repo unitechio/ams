@@ -10,6 +10,7 @@ import { SCOPES } from '@/auth/permissions';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useNavigate } from 'react-router-dom';
+import { StepUpDialog } from '@/components/auth/StepUpDialog';
 const SCOPE_OPTIONS = [
   { value: SCOPES.SELF, label: 'Self', color: 'emerald' },
   { value: SCOPES.DEPARTMENT, label: 'Dept', color: 'emerald' },
@@ -28,6 +29,7 @@ export default function AssignRolePermissionsPage() {
   const [selectedPerms, setSelectedPerms] = useState<Record<string, string>>({});
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [stepUpOpen, setStepUpOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -74,18 +76,7 @@ export default function AssignRolePermissionsPage() {
 
   const handleSave = async () => {
     if (!selectedRoleID) return;
-    setSaving(true);
-    try {
-      const payload = Object.entries(selectedPerms).map(([code, scope]) => ({ code, scope }));
-      await rolesApi.assignPermissions(Number(selectedRoleID), payload);
-      toast.success('Gán quyền thành công');
-      // Refresh local roles list to keep sync
-      fetchData();
-    } catch {
-      toast.error('Lỗi khi lưu phân quyền');
-    } finally {
-      setSaving(false);
-    }
+    setStepUpOpen(true);
   };
 
   // Group permissions
@@ -103,6 +94,26 @@ export default function AssignRolePermissionsPage() {
   const selectedRole = roles.find(r => r.id === Number(selectedRoleID));
 
   return (
+    <>
+    <StepUpDialog
+      open={stepUpOpen}
+      onOpenChange={setStepUpOpen}
+      onVerified={async () => {
+        if (!selectedRoleID) return;
+        setSaving(true);
+        try {
+          const payload = Object.entries(selectedPerms).map(([code, scope]) => ({ code, scope }));
+          await rolesApi.assignPermissions(Number(selectedRoleID), payload);
+          toast.success('Gán quyền thành công');
+          fetchData();
+        } catch {
+          toast.error('Lỗi khi lưu phân quyền');
+        } finally {
+          setSaving(false);
+        }
+      }}
+      description="Xác thực lại trước khi thay đổi quyền hạn của vai trò."
+    />
     <div className="space-y-6">
       <PageHeader
         title="Phân quyền vai trò"
@@ -413,6 +424,7 @@ export default function AssignRolePermissionsPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

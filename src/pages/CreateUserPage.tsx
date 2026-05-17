@@ -18,6 +18,18 @@ import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { generateRandomPassword, getPasswordPolicyHint } from '@/lib/password';
 
+const CLIENT_OPTIONS = [
+  { value: 'web_portal', label: 'Web Portal' },
+  { value: 'crm_portal', label: 'CRM Portal' },
+  { value: 'mobile_app_tpv_public', label: 'Mobile App' },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: 'web', label: 'Web' },
+  { value: 'crm', label: 'CRM' },
+  { value: 'mobile', label: 'Mobile' },
+];
+
 export default function CreateUserPage() {
   const navigate = useNavigate();
   const [roles, setRoles] = useState<ApiRole[]>([]);
@@ -29,7 +41,9 @@ export default function CreateUserPage() {
     username: '', password: '', full_name: '', email: '',
     phone: '', status: 'active', role_ids: [] as number[],
     one_time_password: false, require_otp: false, two_factor_enabled: false,
-    password_expires_at: ''
+    password_expires_at: '',
+    allowed_clients: ['web_portal'] as string[],
+    allowed_channels: ['web'] as string[],
   });
 
   useEffect(() => {
@@ -61,6 +75,12 @@ export default function CreateUserPage() {
 
   const toggleRole = (id: number) =>
     setForm(f => ({ ...f, role_ids: f.role_ids.includes(id) ? f.role_ids.filter(r => r !== id) : [...f.role_ids, id] }));
+
+  const toggleMulti = (field: 'allowed_clients' | 'allowed_channels', value: string) =>
+    setForm(f => ({
+      ...f,
+      [field]: f[field].includes(value) ? f[field].filter(item => item !== value) : [...f[field], value],
+    }));
 
   const applyRandomPassword = () => {
     const password = generateRandomPassword();
@@ -299,6 +319,38 @@ export default function CreateUserPage() {
                   onChange={v => setForm(f => ({ ...f, password_expires_at: v || '' }))}
                   className="h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
                 />
+              </div>
+
+              <div className="pt-4 border-t border-slate-50 space-y-3">
+                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Client được phép đăng nhập</Label>
+                <div className="space-y-2">
+                  {CLIENT_OPTIONS.map((option) => (
+                    <label key={option.value} className="flex items-center gap-2 text-sm text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={form.allowed_clients.includes(option.value)}
+                        onChange={() => toggleMulti('allowed_clients', option.value)}
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-50 space-y-3">
+                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Kênh đăng nhập</Label>
+                <div className="space-y-2">
+                  {CHANNEL_OPTIONS.map((option) => (
+                    <label key={option.value} className="flex items-center gap-2 text-sm text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={form.allowed_channels.includes(option.value)}
+                        onChange={() => toggleMulti('allowed_channels', option.value)}
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

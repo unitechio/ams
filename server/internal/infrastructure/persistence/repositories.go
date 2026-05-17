@@ -161,11 +161,28 @@ func gormToUser(m *GormUser) *domain.User {
 	if m.PasswordHistoryJSON != "" {
 		_ = json.Unmarshal([]byte(m.PasswordHistoryJSON), &passwordHistory)
 	}
+	allowedClients := []string{}
+	if m.AllowedClientsJSON != "" {
+		_ = json.Unmarshal([]byte(m.AllowedClientsJSON), &allowedClients)
+	}
+	allowedChannels := []string{}
+	if m.AllowedChannelsJSON != "" {
+		_ = json.Unmarshal([]byte(m.AllowedChannelsJSON), &allowedChannels)
+	}
 	return &domain.User{
 		ID:                m.ID,
 		Username:          m.Username,
 		PasswordHash:      m.PasswordHash,
 		PasswordHistory:   passwordHistory,
+		AllowedClients:    allowedClients,
+		AllowedChannels:   allowedChannels,
+		EmailVerified:     m.EmailVerified,
+		EmailOTPHash:      m.EmailOTPHash,
+		EmailOTPExpiresAt: m.EmailOTPExpiresAt,
+		EmailVerifyHash:   m.EmailVerifyHash,
+		EmailVerifyExpiry: m.EmailVerifyExpiry,
+		TOTPSecret:        m.TOTPSecret,
+		PendingTOTPSecret: m.PendingTOTPSecret,
 		Email:             m.Email,
 		FullName:          m.FullName,
 		Phone:             m.Phone,
@@ -190,11 +207,32 @@ func userToGorm(u *domain.User) *GormUser {
 			passwordHistoryJSON = string(payload)
 		}
 	}
+	allowedClientsJSON := "[]"
+	if len(u.AllowedClients) > 0 {
+		if payload, err := json.Marshal(u.AllowedClients); err == nil {
+			allowedClientsJSON = string(payload)
+		}
+	}
+	allowedChannelsJSON := "[]"
+	if len(u.AllowedChannels) > 0 {
+		if payload, err := json.Marshal(u.AllowedChannels); err == nil {
+			allowedChannelsJSON = string(payload)
+		}
+	}
 	return &GormUser{
 		ID:                  u.ID,
 		Username:            u.Username,
 		PasswordHash:        u.PasswordHash,
 		PasswordHistoryJSON: passwordHistoryJSON,
+		AllowedClientsJSON:  allowedClientsJSON,
+		AllowedChannelsJSON: allowedChannelsJSON,
+		EmailVerified:       u.EmailVerified,
+		EmailOTPHash:        u.EmailOTPHash,
+		EmailOTPExpiresAt:   u.EmailOTPExpiresAt,
+		EmailVerifyHash:     u.EmailVerifyHash,
+		EmailVerifyExpiry:   u.EmailVerifyExpiry,
+		TOTPSecret:          u.TOTPSecret,
+		PendingTOTPSecret:   u.PendingTOTPSecret,
 		Email:               u.Email,
 		FullName:            u.FullName,
 		Phone:               u.Phone,
@@ -410,27 +448,143 @@ type GormTokenRepository struct{ db *gorm.DB }
 func NewGormTokenRepository(db *gorm.DB) *GormTokenRepository { return &GormTokenRepository{db} }
 
 func (r *GormTokenRepository) Save(t *domain.RefreshToken) error {
-	m := &GormRefreshToken{UserID: t.UserID, Token: t.Token, ExpiresAt: t.ExpiresAt}
+	m := &GormRefreshToken{
+		UserID:            t.UserID,
+		Token:             t.Token,
+		SessionID:         t.SessionID,
+		TokenFamily:       t.TokenFamily,
+		ClientID:          t.ClientID,
+		DeviceName:        t.DeviceName,
+		DeviceFingerprint: t.DeviceFingerprint,
+		IPAddress:         t.IPAddress,
+		UserAgent:         t.UserAgent,
+		Trusted:           t.Trusted,
+		RotatedFrom:       t.RotatedFrom,
+		RevokedReason:     t.RevokedReason,
+		ExpiresAt:         t.ExpiresAt,
+		LastUsedAt:        t.LastUsedAt,
+		ReuseDetectedAt:   t.ReuseDetectedAt,
+		Revoked:           t.Revoked,
+	}
 	return r.db.Create(m).Error
 }
 
 func (r *GormTokenRepository) FindByToken(token string) (*domain.RefreshToken, error) {
 	var m GormRefreshToken
 	if err := r.db.Where("token = ? AND revoked = false", token).First(&m).Error; err != nil {
-		return nil, err
+		if err := r.db.Where("token = ?", token).First(&m).Error; err != nil {
+			return nil, err
+		}
 	}
 	return &domain.RefreshToken{
-		ID: m.ID, UserID: m.UserID, Token: m.Token,
-		ExpiresAt: m.ExpiresAt, Revoked: m.Revoked, CreatedAt: m.CreatedAt,
+		ID:                m.ID,
+		UserID:            m.UserID,
+		Token:             m.Token,
+		SessionID:         m.SessionID,
+		TokenFamily:       m.TokenFamily,
+		ClientID:          m.ClientID,
+		DeviceName:        m.DeviceName,
+		DeviceFingerprint: m.DeviceFingerprint,
+		IPAddress:         m.IPAddress,
+		UserAgent:         m.UserAgent,
+		Trusted:           m.Trusted,
+		RotatedFrom:       m.RotatedFrom,
+		RevokedReason:     m.RevokedReason,
+		ExpiresAt:         m.ExpiresAt,
+		LastUsedAt:        m.LastUsedAt,
+		ReuseDetectedAt:   m.ReuseDetectedAt,
+		Revoked:           m.Revoked,
+		CreatedAt:         m.CreatedAt,
 	}, nil
 }
 
 func (r *GormTokenRepository) RevokeByUserID(userID uint) error {
-	return r.db.Model(&GormRefreshToken{}).Where("user_id = ?", userID).Update("revoked", true).Error
+	return r.db.Model(&GormRefreshToken{}).Where("user_id = ?", userID).Updates(map[string]interface{}{"revoked": true, "revoked_reason": "user_logout_all"}).Error
 }
 
 func (r *GormTokenRepository) RevokeToken(token string) error {
-	return r.db.Model(&GormRefreshToken{}).Where("token = ?", token).Update("revoked", true).Error
+	return r.db.Model(&GormRefreshToken{}).Where("token = ?", token).Updates(map[string]interface{}{"revoked": true, "revoked_reason": "token_rotated"}).Error
+}
+
+func (r *GormTokenRepository) RevokeSession(userID uint, sessionID string) error {
+	return r.db.Model(&GormRefreshToken{}).
+		Where("user_id = ? AND session_id = ?", userID, sessionID).
+		Updates(map[string]interface{}{"revoked": true, "revoked_reason": "session_revoked"}).Error
+}
+
+func (r *GormTokenRepository) RevokeFamily(familyID string, reason string) error {
+	return r.db.Model(&GormRefreshToken{}).
+		Where("token_family = ?", familyID).
+		Updates(map[string]interface{}{"revoked": true, "revoked_reason": reason}).Error
+}
+
+func (r *GormTokenRepository) ListActiveSessions(userID uint) ([]*domain.RefreshToken, error) {
+	var models []GormRefreshToken
+	if err := r.db.
+		Where("user_id = ? AND revoked = false AND expires_at > ?", userID, time.Now()).
+		Order("last_used_at DESC, created_at DESC").
+		Find(&models).Error; err != nil {
+		return nil, err
+	}
+	result := make([]*domain.RefreshToken, 0, len(models))
+	seen := map[string]bool{}
+	for _, m := range models {
+		if m.SessionID == "" || seen[m.SessionID] {
+			continue
+		}
+		seen[m.SessionID] = true
+		result = append(result, &domain.RefreshToken{
+			ID:                m.ID,
+			UserID:            m.UserID,
+			Token:             m.Token,
+			SessionID:         m.SessionID,
+			TokenFamily:       m.TokenFamily,
+			ClientID:          m.ClientID,
+			DeviceName:        m.DeviceName,
+			DeviceFingerprint: m.DeviceFingerprint,
+			IPAddress:         m.IPAddress,
+			UserAgent:         m.UserAgent,
+			Trusted:           m.Trusted,
+			RotatedFrom:       m.RotatedFrom,
+			RevokedReason:     m.RevokedReason,
+			ExpiresAt:         m.ExpiresAt,
+			LastUsedAt:        m.LastUsedAt,
+			ReuseDetectedAt:   m.ReuseDetectedAt,
+			Revoked:           m.Revoked,
+			CreatedAt:         m.CreatedAt,
+		})
+	}
+	return result, nil
+}
+
+func (r *GormTokenRepository) FindTrustedDevice(userID uint, clientID, fingerprint string) (*domain.RefreshToken, error) {
+	var m GormRefreshToken
+	if err := r.db.
+		Where("user_id = ? AND client_id = ? AND device_fingerprint = ? AND trusted = true AND revoked = false AND expires_at > ?", userID, clientID, fingerprint, time.Now()).
+		Order("last_used_at DESC, created_at DESC").
+		First(&m).Error; err != nil {
+		return nil, err
+	}
+	return &domain.RefreshToken{
+		ID:                m.ID,
+		UserID:            m.UserID,
+		Token:             m.Token,
+		SessionID:         m.SessionID,
+		TokenFamily:       m.TokenFamily,
+		ClientID:          m.ClientID,
+		DeviceName:        m.DeviceName,
+		DeviceFingerprint: m.DeviceFingerprint,
+		IPAddress:         m.IPAddress,
+		UserAgent:         m.UserAgent,
+		Trusted:           m.Trusted,
+		RotatedFrom:       m.RotatedFrom,
+		RevokedReason:     m.RevokedReason,
+		ExpiresAt:         m.ExpiresAt,
+		LastUsedAt:        m.LastUsedAt,
+		ReuseDetectedAt:   m.ReuseDetectedAt,
+		Revoked:           m.Revoked,
+		CreatedAt:         m.CreatedAt,
+	}, nil
 }
 
 // ─── Permission Repository ────────────────────────────────────────────────────

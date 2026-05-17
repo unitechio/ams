@@ -17,6 +17,18 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 
+const CLIENT_OPTIONS = [
+  { value: 'web_portal', label: 'Web Portal' },
+  { value: 'crm_portal', label: 'CRM Portal' },
+  { value: 'mobile_app_tpv_public', label: 'Mobile App' },
+];
+
+const CHANNEL_OPTIONS = [
+  { value: 'web', label: 'Web' },
+  { value: 'crm', label: 'CRM' },
+  { value: 'mobile', label: 'Mobile' },
+];
+
 export default function EditUserPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -29,7 +41,9 @@ export default function EditUserPage() {
     full_name: '', email: '',
     phone: '', status: 'active', role_ids: [] as number[],
     one_time_password: false, require_otp: false, two_factor_enabled: false,
-    password_expires_at: ''
+    password_expires_at: '',
+    allowed_clients: ['web_portal'] as string[],
+    allowed_channels: ['web'] as string[],
   });
 
   useEffect(() => {
@@ -59,7 +73,9 @@ export default function EditUserPage() {
           one_time_password: found.one_time_password || false,
           require_otp: found.require_otp || false,
           two_factor_enabled: found.two_factor_enabled || false,
-          password_expires_at: found.password_expires_at?.split('T')[0] || ''
+          password_expires_at: found.password_expires_at?.split('T')[0] || '',
+          allowed_clients: found.allowed_clients || ['web_portal'],
+          allowed_channels: found.allowed_channels || ['web'],
         });
       })
       .catch(() => toast.error('Lỗi tải dữ liệu'))
@@ -89,6 +105,12 @@ export default function EditUserPage() {
 
   const toggleRole = (roleID: number) =>
     setForm(f => ({ ...f, role_ids: f.role_ids.includes(roleID) ? f.role_ids.filter(r => r !== roleID) : [...f.role_ids, roleID] }));
+
+  const toggleMulti = (field: 'allowed_clients' | 'allowed_channels', value: string) =>
+    setForm(f => ({
+      ...f,
+      [field]: f[field].includes(value) ? f[field].filter(item => item !== value) : [...f[field], value],
+    }));
 
   if (loading) {
     return (
@@ -275,6 +297,38 @@ export default function EditUserPage() {
                   onChange={v => setForm(f => ({ ...f, password_expires_at: v || '' }))}
                   className="h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
                 />
+              </div>
+
+              <div className="pt-4 border-t border-slate-50 space-y-3">
+                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Client được phép đăng nhập</Label>
+                <div className="space-y-2">
+                  {CLIENT_OPTIONS.map((option) => (
+                    <label key={option.value} className="flex items-center gap-2 text-sm text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={form.allowed_clients.includes(option.value)}
+                        onChange={() => toggleMulti('allowed_clients', option.value)}
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-50 space-y-3">
+                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Kênh đăng nhập</Label>
+                <div className="space-y-2">
+                  {CHANNEL_OPTIONS.map((option) => (
+                    <label key={option.value} className="flex items-center gap-2 text-sm text-slate-600">
+                      <input
+                        type="checkbox"
+                        checked={form.allowed_channels.includes(option.value)}
+                        onChange={() => toggleMulti('allowed_channels', option.value)}
+                      />
+                      {option.label}
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
           </div>

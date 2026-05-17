@@ -9,13 +9,16 @@ import (
 
 var (
 	ErrInvalidToken = errors.New("invalid token")
-	ErrExpiredToken  = errors.New("token expired")
+	ErrExpiredToken = errors.New("token expired")
 )
 
 type Claims struct {
-	UserID   uint     `json:"uid"`
-	Username string   `json:"username"`
-	Roles    []string `json:"roles"`
+	UserID    uint     `json:"uid"`
+	Username  string   `json:"username"`
+	Roles     []string `json:"roles"`
+	SessionID string   `json:"sid"`
+	ClientID  string   `json:"cid"`
+	Purpose   string   `json:"purpose,omitempty"`
 	gojwt.RegisteredClaims
 }
 
@@ -33,11 +36,13 @@ func NewService(secret string, accessTTL, refreshTTL time.Duration) *Service {
 	}
 }
 
-func (s *Service) GenerateAccessToken(userID uint, username string, roles []string) (string, error) {
+func (s *Service) GenerateAccessToken(userID uint, username string, roles []string, sessionID, clientID string) (string, error) {
 	claims := &Claims{
-		UserID:   userID,
-		Username: username,
-		Roles:    roles,
+		UserID:    userID,
+		Username:  username,
+		Roles:     roles,
+		SessionID: sessionID,
+		ClientID:  clientID,
 		RegisteredClaims: gojwt.RegisteredClaims{
 			ExpiresAt: gojwt.NewNumericDate(time.Now().Add(s.accessTokenTTL)),
 			IssuedAt:  gojwt.NewNumericDate(time.Now()),
@@ -48,11 +53,32 @@ func (s *Service) GenerateAccessToken(userID uint, username string, roles []stri
 	return token.SignedString(s.secret)
 }
 
-func (s *Service) GenerateRefreshToken(userID uint, username string) (string, time.Time, error) {
+func (s *Service) GenerateRefreshToken(userID uint, username, sessionID, clientID string) (string, time.Time, error) {
 	expiry := time.Now().Add(s.refreshTokenTTL)
 	claims := &Claims{
-		UserID:   userID,
-		Username: username,
+		UserID:    userID,
+		Username:  username,
+		SessionID: sessionID,
+		ClientID:  clientID,
+		RegisteredClaims: gojwt.RegisteredClaims{
+			ExpiresAt: gojwt.NewNumericDate(expiry),
+			IssuedAt:  gojwt.NewNumericDate(time.Now()),
+			Subject:   username,
+		},
+	}
+	token := gojwt.NewWithClaims(gojwt.SigningMethodHS256, claims)
+	signed, err := token.SignedString(s.secret)
+	return signed, expiry, err
+}
+
+func (s *Service) GenerateStepUpToken(userID uint, username, sessionID, clientID string, ttl time.Duration) (string, time.Time, error) {
+	expiry := time.Now().Add(ttl)
+	claims := &Claims{
+		UserID:    userID,
+		Username:  username,
+		SessionID: sessionID,
+		ClientID:  clientID,
+		Purpose:   "step_up",
 		RegisteredClaims: gojwt.RegisteredClaims{
 			ExpiresAt: gojwt.NewNumericDate(expiry),
 			IssuedAt:  gojwt.NewNumericDate(time.Now()),
