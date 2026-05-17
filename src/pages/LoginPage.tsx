@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { authApi } from '@/lib/api';
 
 export default function LoginPage() {
-  const { login, mustChangePassword, clearMustChangePassword } = useAuth();
+  const { login, mustChangePassword, passwordChangeReason, clearMustChangePassword } = useAuth();
   const navigate = useNavigate();
   
   const [step, setStep] = useState<'login' | '2fa' | 'change_password' | 'forgot_password' | 'reset_sent'>('login');
@@ -45,7 +45,7 @@ export default function LoginPage() {
     setError('');
     
     if (failCount >= 5) {
-      setError('Tài khoản đã bị tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 15 phút.');
+      setError('Tài khoản đã bị tạm khóa do đăng nhập sai nhiều lần. Vui lòng thử lại sau 30 phút.');
       return;
     }
 
@@ -61,9 +61,11 @@ export default function LoginPage() {
         if (otp.length !== 6) throw new Error('Mã OTP không hợp lệ');
       }
 
-      await login(username, password);
-      // mustChangePassword effect will handle redirect if needed
-      // otherwise go to dashboard
+      const resp = await login(username, password);
+      if (resp.must_change_password || resp.password_expired || resp.one_time_password || resp.require_password_change) {
+        setStep('change_password');
+        return;
+      }
       navigate('/');
     } catch (err: unknown) {
       setFailCount(f => f + 1);
@@ -86,8 +88,8 @@ export default function LoginPage() {
   const handleForceChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (newPassword.length < 6) {
-      setError('Mật khẩu mới phải có ít nhất 6 ký tự.');
+    if (newPassword.length < 8) {
+      setError('Mật khẩu mới phải có ít nhất 8 ký tự.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -98,6 +100,7 @@ export default function LoginPage() {
     try {
       await authApi.changePassword(password, newPassword);
       clearMustChangePassword();
+      setPassword('');
       navigate('/');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Đổi mật khẩu thất bại');
@@ -260,8 +263,9 @@ export default function LoginPage() {
                 </div>
                 <h2 className="text-lg font-bold text-slate-800">Đổi mật khẩu bắt buộc</h2>
                 <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">
-                  Tài khoản của bạn đang dùng <strong>mật khẩu tạm thời</strong>.<br />
-                  Vui lòng đặt mật khẩu mới để tiếp tục.
+                  {passwordChangeReason === 'password_expired'
+                    ? <>Mật khẩu hiện tại đã <strong>hết hạn</strong>.<br />Vui lòng đặt mật khẩu mới để tiếp tục.</>
+                    : <>Tài khoản của bạn đang dùng <strong>mật khẩu tạm thời</strong>.<br />Vui lòng đặt mật khẩu mới để tiếp tục.</>}
                 </p>
               </div>
 
@@ -273,7 +277,7 @@ export default function LoginPage() {
                   <Input
                     id="new_pw"
                     type={showNew ? 'text' : 'password'}
-                    placeholder="Ít nhất 6 ký tự"
+                    placeholder="Tối thiểu 8 ký tự"
                     value={newPassword}
                     onChange={e => setNewPassword(e.target.value)}
                     className="pl-9 pr-10 h-11"
@@ -311,7 +315,7 @@ export default function LoginPage() {
                     <AlertCircle className="w-3 h-3" /> Mật khẩu xác nhận không khớp
                   </p>
                 )}
-                {confirmPassword && newPassword === confirmPassword && newPassword.length >= 6 && (
+                {confirmPassword && newPassword === confirmPassword && newPassword.length >= 8 && (
                   <p className="text-xs text-emerald-600 flex items-center gap-1 mt-1">
                     <CheckCircle2 className="w-3 h-3" /> Mật khẩu khớp
                   </p>
@@ -328,7 +332,7 @@ export default function LoginPage() {
               <Button
                 type="submit"
                 className="w-full h-11 bg-amber-500 hover:bg-amber-600 text-white font-semibold"
-                disabled={loading || newPassword.length < 6 || newPassword !== confirmPassword}
+                disabled={loading || newPassword.length < 8 || newPassword !== confirmPassword}
               >
                 {loading
                   ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Đang lưu...</>
@@ -338,9 +342,11 @@ export default function LoginPage() {
 
               {/* Password strength hints */}
               <ul className="text-[11px] text-slate-400 space-y-0.5 pl-4 list-disc">
-                <li className={newPassword.length >= 6 ? 'text-emerald-500' : ''}>Ít nhất 6 ký tự</li>
+                <li className={newPassword.length >= 8 ? 'text-emerald-500' : ''}>Ít nhất 8 ký tự</li>
                 <li className={/[A-Z]/.test(newPassword) ? 'text-emerald-500' : ''}>Có ít nhất 1 chữ hoa</li>
+                <li className={/[a-z]/.test(newPassword) ? 'text-emerald-500' : ''}>Có ít nhất 1 chữ thường</li>
                 <li className={/[0-9]/.test(newPassword) ? 'text-emerald-500' : ''}>Có ít nhất 1 chữ số</li>
+                <li className={/[^A-Za-z0-9]/.test(newPassword) ? 'text-emerald-500' : ''}>Có ít nhất 1 ký tự đặc biệt</li>
               </ul>
             </form>
           )}

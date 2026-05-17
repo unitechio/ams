@@ -320,13 +320,14 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 	var body struct {
-		Password string `json:"password" binding:"required,min=6"`
+		Password        string `json:"password" binding:"required,min=8"`
+		OneTimePassword bool   `json:"one_time_password"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := h.uc.ResetPassword(id, body.Password); err != nil {
+	if err := h.uc.ResetPassword(id, body.Password, body.OneTimePassword); err != nil {
 		fail(c, http.StatusInternalServerError, err.Error())
 		return
 	}

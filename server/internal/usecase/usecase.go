@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/owner/auth-server/internal/authorization/permission"
 	"github.com/owner/auth-server/internal/domain"
@@ -15,11 +16,18 @@ import (
 )
 
 var (
-	mockResetTokens  = struct{ sync.RWMutex; m map[string]uint }{m: make(map[string]uint)}
-	mockVerifyTokens = struct{ sync.RWMutex; m map[string]uint }{m: make(map[string]uint)}
+	mockResetTokens = struct {
+		sync.RWMutex
+		m map[string]uint
+	}{m: make(map[string]uint)}
+	mockVerifyTokens = struct {
+		sync.RWMutex
+		m map[string]uint
+	}{m: make(map[string]uint)}
 )
 
 const maxFailedLogins = 5
+const passwordHistoryLimit = 5
 
 var (
 	ErrInvalidCredentials = errors.New("sai tên đăng nhập hoặc mật khẩu")
@@ -38,24 +46,27 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	AccessToken  string   `json:"access_token"`
-	RefreshToken string   `json:"refresh_token"`
-	User         UserInfo `json:"user"`
+	AccessToken          string   `json:"access_token"`
+	RefreshToken         string   `json:"refresh_token"`
+	User                 UserInfo `json:"user"`
+	MustChangePassword   bool     `json:"must_change_password"`
+	PasswordExpired      bool     `json:"password_expired"`
+	PasswordChangeReason string   `json:"password_change_reason,omitempty"`
 }
 
 type UserInfo struct {
-	ID          uint     `json:"id"`
-	Username    string   `json:"username"`
-	FullName    string   `json:"full_name"`
-	Email       string   `json:"email"`
-	Phone       string   `json:"phone"`
-	Status            string   `json:"status"`
-	Roles             []string `json:"roles"`
-	Permissions       []string `json:"permissions"`
+	ID                uint       `json:"id"`
+	Username          string     `json:"username"`
+	FullName          string     `json:"full_name"`
+	Email             string     `json:"email"`
+	Phone             string     `json:"phone"`
+	Status            string     `json:"status"`
+	Roles             []string   `json:"roles"`
+	Permissions       []string   `json:"permissions"`
 	PasswordExpiresAt *time.Time `json:"password_expires_at,omitempty"`
-	OneTimePassword   bool     `json:"one_time_password"`
-	RequireOTP        bool     `json:"require_otp"`
-	TwoFactorEnabled  bool     `json:"two_factor_enabled"`
+	OneTimePassword   bool       `json:"one_time_password"`
+	RequireOTP        bool       `json:"require_otp"`
+	TwoFactorEnabled  bool       `json:"two_factor_enabled"`
 }
 
 // ─── Auth Usecase ─────────────────────────────────────────────────────────────
@@ -87,6 +98,12 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 	if user.Status == "inactive" {
 		uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Tài khoản bị vô hiệu hóa")
 		return nil, ErrAccountInactive
+	}
+	if user.Status == "locked" && user.LockedUntil != nil && user.LockedUntil.Before(time.Now()) {
+		user.Status = "active"
+		user.LockedUntil = nil
+		user.FailedLogins = 0
+		_ = uc.userRepo.Save(user)
 	}
 	if user.IsLocked() {
 		uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "locked", "Tài khoản đang bị khóa")
@@ -153,11 +170,11 @@ func (uc *AuthUsecase) Me(userID uint) (*UserInfo, error) {
 	}
 	ps := user.EffectivePermissions()
 	return &UserInfo{
-		ID:          user.ID,
-		Username:    user.Username,
-		FullName:    user.FullName,
-		Email:       user.Email,
-		Phone:       user.Phone,
+		ID:                user.ID,
+		Username:          user.Username,
+		FullName:          user.FullName,
+		Email:             user.Email,
+		Phone:             user.Phone,
 		Status:            user.Status,
 		Roles:             roleNames(user),
 		Permissions:       ps.List(),
@@ -176,8 +193,16 @@ func (uc *AuthUsecase) ChangePassword(userID uint, oldPw, newPw string) error {
 	if bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(oldPw)) != nil {
 		return errors.New("mật khẩu cũ không đúng")
 	}
+	if err := validatePasswordPolicy(user, newPw); err != nil {
+		return err
+	}
 	hash, _ := bcrypt.GenerateFromPassword([]byte(newPw), bcrypt.DefaultCost)
 	user.PasswordHash = string(hash)
+	user.PasswordHistory = appendPasswordHistory(user.PasswordHistory, user.PasswordHash)
+	user.OneTimePassword = false
+	if user.PasswordExpiresAt != nil && !user.PasswordExpiresAt.After(time.Now()) {
+		user.PasswordExpiresAt = nil
+	}
 	uc.tokenRepo.RevokeByUserID(userID)
 	return uc.userRepo.Save(user)
 }
@@ -185,6 +210,14 @@ func (uc *AuthUsecase) ChangePassword(userID uint, oldPw, newPw string) error {
 func (uc *AuthUsecase) buildLoginResponse(user *domain.User) (*LoginResponse, error) {
 	ps := user.EffectivePermissions()
 	roles := roleNames(user)
+	passwordExpired := user.PasswordExpiresAt != nil && !user.PasswordExpiresAt.After(time.Now())
+	mustChangePassword := user.OneTimePassword || passwordExpired
+	passwordChangeReason := ""
+	if user.OneTimePassword {
+		passwordChangeReason = "one_time_password"
+	} else if passwordExpired {
+		passwordChangeReason = "password_expired"
+	}
 
 	accessToken, err := uc.jwt.GenerateAccessToken(user.ID, user.Username, roles)
 	if err != nil {
@@ -197,14 +230,17 @@ func (uc *AuthUsecase) buildLoginResponse(user *domain.User) (*LoginResponse, er
 	uc.tokenRepo.Save(&domain.RefreshToken{UserID: user.ID, Token: refreshStr, ExpiresAt: expiry})
 
 	return &LoginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshStr,
+		AccessToken:          accessToken,
+		RefreshToken:         refreshStr,
+		MustChangePassword:   mustChangePassword,
+		PasswordExpired:      passwordExpired,
+		PasswordChangeReason: passwordChangeReason,
 		User: UserInfo{
-			ID:          user.ID,
-			Username:    user.Username,
-			FullName:    user.FullName,
-			Email:       user.Email,
-			Phone:       user.Phone,
+			ID:                user.ID,
+			Username:          user.Username,
+			FullName:          user.FullName,
+			Email:             user.Email,
+			Phone:             user.Phone,
 			Status:            user.Status,
 			Roles:             roles,
 			Permissions:       ps.List(),
@@ -226,8 +262,8 @@ type SessionResponse struct {
 }
 
 type Setup2FAResponse struct {
-	Secret     string `json:"secret"`
-	QRCodeURL  string `json:"qr_code_url"`
+	Secret    string `json:"secret"`
+	QRCodeURL string `json:"qr_code_url"`
 }
 
 func (uc *AuthUsecase) ListSessions(userID uint) ([]SessionResponse, error) {
@@ -315,7 +351,7 @@ func (uc *AuthUsecase) ResetPasswordWithToken(token string, newPassword string) 
 
 	hash, _ := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	user.PasswordHash = string(hash)
-	
+
 	if err := uc.userRepo.Save(user); err != nil {
 		return err
 	}
@@ -369,7 +405,7 @@ func (uc *AuthUsecase) VerifyEmail(token string) error {
 
 	// Set user status to active (or mark email as verified)
 	user.Status = "active"
-	
+
 	if err := uc.userRepo.Save(user); err != nil {
 		return err
 	}
@@ -410,11 +446,11 @@ type UpdateUserReq struct {
 }
 
 type UserResponse struct {
-	ID       uint     `json:"id"`
-	Username string   `json:"username"`
-	FullName string   `json:"full_name"`
-	Email    string   `json:"email"`
-	Phone    string   `json:"phone"`
+	ID                uint       `json:"id"`
+	Username          string     `json:"username"`
+	FullName          string     `json:"full_name"`
+	Email             string     `json:"email"`
+	Phone             string     `json:"phone"`
 	Status            string     `json:"status"`
 	Roles             []string   `json:"roles"`
 	RoleIDs           []uint     `json:"role_ids"`
@@ -432,9 +468,14 @@ type PaginatedResult[T any] struct {
 	TotalPages int   `json:"total_pages"`
 }
 
-type UserUsecase struct{ repo domain.UserRepository }
+type UserUsecase struct {
+	repo      domain.UserRepository
+	tokenRepo domain.TokenRepository
+}
 
-func NewUserUsecase(repo domain.UserRepository) *UserUsecase { return &UserUsecase{repo} }
+func NewUserUsecase(repo domain.UserRepository, tokenRepo domain.TokenRepository) *UserUsecase {
+	return &UserUsecase{repo: repo, tokenRepo: tokenRepo}
+}
 
 func (uc *UserUsecase) List(spec interface{}, page, pageSize int) (*PaginatedResult[UserResponse], error) {
 	users, total, err := uc.repo.List(spec)
@@ -458,6 +499,20 @@ func (uc *UserUsecase) GetByID(id uint) (*UserResponse, error) {
 }
 
 func (uc *UserUsecase) Create(req *CreateUserReq) (*UserResponse, error) {
+	u := &domain.User{
+		Username:          req.Username,
+		FullName:          req.FullName,
+		Email:             req.Email,
+		Phone:             req.Phone,
+		Status:            req.Status,
+		PasswordExpiresAt: req.PasswordExpiresAt,
+		OneTimePassword:   req.OneTimePassword,
+		RequireOTP:        req.RequireOTP,
+		TwoFactorEnabled:  req.TwoFactorEnabled,
+	}
+	if err := validatePasswordPolicy(u, req.Password); err != nil {
+		return nil, err
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, err
@@ -466,12 +521,9 @@ func (uc *UserUsecase) Create(req *CreateUserReq) (*UserResponse, error) {
 	if status == "" {
 		status = "active"
 	}
-	u := &domain.User{
-		Username: req.Username, PasswordHash: string(hash),
-		FullName: req.FullName, Email: req.Email, Phone: req.Phone, Status: status,
-		PasswordExpiresAt: req.PasswordExpiresAt, OneTimePassword: req.OneTimePassword,
-		RequireOTP: req.RequireOTP, TwoFactorEnabled: req.TwoFactorEnabled,
-	}
+	u.PasswordHash = string(hash)
+	u.Status = status
+	u.PasswordHistory = appendPasswordHistory(nil, u.PasswordHash)
 	if err = uc.repo.Save(u); err != nil {
 		return nil, fmt.Errorf("tạo người dùng thất bại: %w", err)
 	}
@@ -523,14 +575,30 @@ func (uc *UserUsecase) Update(id uint, req *UpdateUserReq) (*UserResponse, error
 
 func (uc *UserUsecase) Delete(id uint) error { return uc.repo.Delete(id) }
 
-func (uc *UserUsecase) ResetPassword(id uint, newPassword string) error {
+func (uc *UserUsecase) ResetPassword(id uint, newPassword string, oneTimePassword bool) error {
 	u, err := uc.repo.FindByID(id)
 	if err != nil {
 		return errors.New("người dùng không tồn tại")
 	}
+	if err := validatePasswordPolicy(u, newPassword); err != nil {
+		return err
+	}
 	hash, _ := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	u.PasswordHash = string(hash)
-	return uc.repo.Save(u)
+	u.PasswordHistory = appendPasswordHistory(u.PasswordHistory, u.PasswordHash)
+	u.OneTimePassword = oneTimePassword
+	u.FailedLogins = 0
+	u.LockedUntil = nil
+	if oneTimePassword {
+		u.PasswordExpiresAt = nil
+	}
+	if err := uc.repo.Save(u); err != nil {
+		return err
+	}
+	if uc.tokenRepo != nil {
+		return uc.tokenRepo.RevokeByUserID(id)
+	}
+	return nil
 }
 
 // ─── Role Usecase ─────────────────────────────────────────────────────────────
@@ -630,11 +698,11 @@ func (uc *RoleUsecase) AssignPermissions(id uint, req *AssignPermReq) error {
 // ─── Permission Usecase ───────────────────────────────────────────────────────
 
 type PermissionResponse struct {
-	ID          uint                   `json:"id"`
-	Code        string                 `json:"code"`
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	GroupName   string                 `json:"group_name"`
+	ID          uint                     `json:"id"`
+	Code        string                   `json:"code"`
+	Name        string                   `json:"name"`
+	Description string                   `json:"description"`
+	GroupName   string                   `json:"group_name"`
 	Lines       []*domain.PermissionLine `json:"lines"`
 }
 
@@ -715,25 +783,25 @@ func (uc *PermissionUsecase) DeleteLine(id uint) error { return uc.repo.DeleteLi
 // ─── Menu Usecase ─────────────────────────────────────────────────────────────
 
 type CreateMenuReq struct {
-	Title          string  `json:"title" binding:"required"`
-	URL            string  `json:"url"`
-	SortOrder      int     `json:"sort_order"`
-	Icon           string  `json:"icon"`
-	PermissionCode string  `json:"permission_code"`
-	ParentID       *uint   `json:"parent_id"`
-	MenuType       string  `json:"menu_type"`
+	Title          string `json:"title" binding:"required"`
+	URL            string `json:"url"`
+	SortOrder      int    `json:"sort_order"`
+	Icon           string `json:"icon"`
+	PermissionCode string `json:"permission_code"`
+	ParentID       *uint  `json:"parent_id"`
+	MenuType       string `json:"menu_type"`
 }
 
 type MenuResponse struct {
-	ID             uint          `json:"id"`
-	Title          string        `json:"title"`
-	URL            string        `json:"url"`
-	SortOrder      int           `json:"sort_order"`
-	Icon           string        `json:"icon"`
-	PermissionCode string        `json:"permission_code"`
-	ParentID       *uint         `json:"parent_id"`
-	MenuType       string        `json:"menu_type"`
-	Level          int           `json:"level"`
+	ID             uint           `json:"id"`
+	Title          string         `json:"title"`
+	URL            string         `json:"url"`
+	SortOrder      int            `json:"sort_order"`
+	Icon           string         `json:"icon"`
+	PermissionCode string         `json:"permission_code"`
+	ParentID       *uint          `json:"parent_id"`
+	MenuType       string         `json:"menu_type"`
+	Level          int            `json:"level"`
 	Children       []MenuResponse `json:"children,omitempty"`
 }
 
@@ -888,6 +956,50 @@ func filterMenuByPermission(menus []*domain.Menu, ps *permission.PermissionSet) 
 	return result
 }
 
+func validatePasswordPolicy(user *domain.User, password string) error {
+	if len(password) < 8 {
+		return errors.New("mật khẩu phải có ít nhất 8 ký tự")
+	}
+
+	var hasUpper, hasLower, hasDigit, hasSpecial bool
+	for _, r := range password {
+		switch {
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsDigit(r):
+			hasDigit = true
+		default:
+			hasSpecial = true
+		}
+	}
+
+	if !hasUpper || !hasLower || !hasDigit || !hasSpecial {
+		return errors.New("mật khẩu phải gồm chữ hoa, chữ thường, số và ký tự đặc biệt")
+	}
+
+	if user.PasswordHash != "" && bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)) == nil {
+		return errors.New("mật khẩu mới không được trùng với các mật khẩu đã dùng gần đây")
+	}
+
+	for _, oldHash := range user.PasswordHistory {
+		if bcrypt.CompareHashAndPassword([]byte(oldHash), []byte(password)) == nil {
+			return errors.New("mật khẩu mới không được trùng với các mật khẩu đã dùng gần đây")
+		}
+	}
+
+	return nil
+}
+
+func appendPasswordHistory(history []string, hash string) []string {
+	next := append(append([]string{}, history...), hash)
+	if len(next) > passwordHistoryLimit {
+		next = next[len(next)-passwordHistoryLimit:]
+	}
+	return next
+}
+
 // ─── Log Usecase ─────────────────────────────────────────────────────────────
 
 type AuditLogResponse struct {
@@ -939,13 +1051,17 @@ func (uc *LogUsecase) ListAuditLogs(spec interface{}) (*PaginatedResult[AuditLog
 			Allowed: l.Allowed, CreatedAt: l.CreatedAt,
 		}
 	}
-	
+
 	page, pageSize := 1, 10
 	if s, ok := spec.(map[string]interface{}); ok {
-		if v, exists := s["page"]; exists { page = v.(int) }
-		if v, exists := s["page_size"]; exists { pageSize = v.(int) }
+		if v, exists := s["page"]; exists {
+			page = v.(int)
+		}
+		if v, exists := s["page_size"]; exists {
+			pageSize = v.(int)
+		}
 	}
-	
+
 	return paginate(res, total, page, pageSize), nil
 }
 
@@ -961,11 +1077,15 @@ func (uc *LogUsecase) ListAuthHistory(spec interface{}) (*PaginatedResult[AuthHi
 			UserAgent: h.UserAgent, Status: h.Status, Note: h.Note, CreatedAt: h.CreatedAt,
 		}
 	}
-	
+
 	page, pageSize := 1, 10
 	if s, ok := spec.(map[string]interface{}); ok {
-		if v, exists := s["page"]; exists { page = v.(int) }
-		if v, exists := s["page_size"]; exists { pageSize = v.(int) }
+		if v, exists := s["page"]; exists {
+			page = v.(int)
+		}
+		if v, exists := s["page_size"]; exists {
+			pageSize = v.(int)
+		}
 	}
 
 	return paginate(res, total, page, pageSize), nil

@@ -16,6 +16,7 @@ import { usersApi, rolesApi, type ApiRole } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
+import { generateRandomPassword, getPasswordPolicyHint } from '@/lib/password';
 
 export default function CreateUserPage() {
   const navigate = useNavigate();
@@ -59,6 +60,13 @@ export default function CreateUserPage() {
 
   const toggleRole = (id: number) =>
     setForm(f => ({ ...f, role_ids: f.role_ids.includes(id) ? f.role_ids.filter(r => r !== id) : [...f.role_ids, id] }));
+
+  const applyRandomPassword = () => {
+    const password = generateRandomPassword();
+    setForm(f => ({ ...f, password, one_time_password: true }));
+    navigator.clipboard.writeText(password).catch(() => {});
+    toast.success('Đã tạo và sao chép mật khẩu ngẫu nhiên');
+  };
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -107,6 +115,12 @@ export default function CreateUserPage() {
                       onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
                       className="pl-9 h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
                     />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] text-slate-400">{getPasswordPolicyHint()}</p>
+                    <Button type="button" variant="outline" size="sm" onClick={applyRandomPassword} className="h-8 rounded-lg whitespace-nowrap">
+                      Random pass
+                    </Button>
                   </div>
                 </div>
                 <div className="space-y-1.5 md:col-span-2">
@@ -272,14 +286,11 @@ export default function CreateUserPage() {
 
               <div className="pt-4 border-t border-slate-50 space-y-1.5">
                 <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Hết hạn mật khẩu</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <DatePicker
-                    value={form.password_expires_at}
-                    onChange={v => setForm(f => ({ ...f, password_expires_at: v || '' }))}
-                    className="pl-9 h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
-                  />
-                </div>
+                <DatePicker
+                  value={form.password_expires_at}
+                  onChange={v => setForm(f => ({ ...f, password_expires_at: v || '' }))}
+                  className="h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
+                />
               </div>
             </div>
           </div>

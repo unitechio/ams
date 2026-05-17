@@ -212,12 +212,12 @@ export default function RolesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40">
-                    <th className="w-10 px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">#</th>
-                    <th className="px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Vai trò</th>
-                    <th className="hidden md:table-cell px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Mô tả</th>
-                    <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-24">Thành viên</th>
-                    <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-24">Quyền hạn</th>
-                    <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-32">Thao tác</th>
+                    <th className="w-10 px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">#</th>
+                    <th className="w-[24%] px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">Vai trò</th>
+                    <th className="hidden md:table-cell w-[40%] px-4 py-2.5 text-left text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider whitespace-nowrap">Mô tả</th>
+                    <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28 whitespace-nowrap">Thành viên</th>
+                    <th className="px-4 py-2.5 text-center text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-28 whitespace-nowrap">Quyền hạn</th>
+                    <th className="px-4 py-2.5 text-right text-[11px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider w-32 whitespace-nowrap">Thao tác</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">

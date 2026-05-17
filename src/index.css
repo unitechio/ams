@@ -105,6 +105,17 @@
   [data-radix-portal] {
     z-index: 9999 !important;
   }
+
+  .rdp {
+    --rdp-background-color: transparent;
+    --rdp-accent-color: #059669;
+    background: white;
+    opacity: 1;
+  }
+
+  .dark .rdp {
+    background: #020617;
+  }
 }
 
 @layer components {

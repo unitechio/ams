@@ -6,31 +6,32 @@ import "time"
 // They are ONLY used inside the persistence package — never exposed to upper layers.
 
 type GormUser struct {
-	ID           uint       `gorm:"primaryKey;autoIncrement"`
-	Username     string     `gorm:"uniqueIndex;size:100;not null"`
-	PasswordHash string     `gorm:"size:255;not null"`
-	Email        string     `gorm:"uniqueIndex;size:200"`
-	FullName     string     `gorm:"size:200;not null;default:''"`
-	Phone        string     `gorm:"size:20;default:''"`
-	Status       string     `gorm:"size:20;default:'active'"`
-	FailedLogins int        `gorm:"default:0"`
-	LockedUntil  *time.Time
-	LastLogin    *time.Time
-	CreatedAt    time.Time
-	UpdatedAt         time.Time
-	Deleted           bool `gorm:"default:false"`
-	PasswordExpiresAt *time.Time
-	OneTimePassword   bool `gorm:"default:false"`
-	RequireOTP        bool `gorm:"default:false"`
-	TwoFactorEnabled  bool `gorm:"default:false"`
+	ID                  uint   `gorm:"primaryKey;autoIncrement"`
+	Username            string `gorm:"uniqueIndex;size:100;not null"`
+	PasswordHash        string `gorm:"size:255;not null"`
+	PasswordHistoryJSON string `gorm:"type:text;default:'[]'"`
+	Email               string `gorm:"uniqueIndex;size:200"`
+	FullName            string `gorm:"size:200;not null;default:''"`
+	Phone               string `gorm:"size:20;default:''"`
+	Status              string `gorm:"size:20;default:'active'"`
+	FailedLogins        int    `gorm:"default:0"`
+	LockedUntil         *time.Time
+	LastLogin           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+	Deleted             bool `gorm:"default:false"`
+	PasswordExpiresAt   *time.Time
+	OneTimePassword     bool `gorm:"default:false"`
+	RequireOTP          bool `gorm:"default:false"`
+	TwoFactorEnabled    bool `gorm:"default:false"`
 }
 
 func (GormUser) TableName() string { return "sys_users" }
 
 type GormRole struct {
-	ID          uint      `gorm:"primaryKey;autoIncrement"`
-	Name        string    `gorm:"uniqueIndex;size:100;not null"`
-	Description string    `gorm:"size:500;default:''"`
+	ID          uint   `gorm:"primaryKey;autoIncrement"`
+	Name        string `gorm:"uniqueIndex;size:100;not null"`
+	Description string `gorm:"size:500;default:''"`
 	CreatedAt   time.Time
 	CreatedBy   string `gorm:"size:100;default:''"`
 	Deleted     bool   `gorm:"default:false"`
@@ -48,11 +49,11 @@ type GormUserRole struct {
 func (GormUserRole) TableName() string { return "sys_user_roles" }
 
 type GormPermissionDef struct {
-	ID          uint      `gorm:"primaryKey;autoIncrement"`
-	Code        string    `gorm:"uniqueIndex;size:200;not null"`
-	Name        string    `gorm:"size:200;not null"`
-	Description string    `gorm:"size:500;default:''"`
-	GroupName   string    `gorm:"size:100;not null;default:''"`
+	ID          uint   `gorm:"primaryKey;autoIncrement"`
+	Code        string `gorm:"uniqueIndex;size:200;not null"`
+	Name        string `gorm:"size:200;not null"`
+	Description string `gorm:"size:500;default:''"`
+	GroupName   string `gorm:"size:100;not null;default:''"`
 	CreatedAt   time.Time
 	Deleted     bool `gorm:"default:false"`
 }
@@ -70,11 +71,11 @@ type GormRolePermission struct {
 func (GormRolePermission) TableName() string { return "sys_role_permissions" }
 
 type GormPermissionLine struct {
-	ID           uint      `gorm:"primaryKey;autoIncrement"`
-	PermissionID uint      `gorm:"not null;index"`
-	Controller   string    `gorm:"size:200;not null"`
-	Action       string    `gorm:"size:200;not null"`
-	Note         string    `gorm:"size:500;default:''"`
+	ID           uint   `gorm:"primaryKey;autoIncrement"`
+	PermissionID uint   `gorm:"not null;index"`
+	Controller   string `gorm:"size:200;not null"`
+	Action       string `gorm:"size:200;not null"`
+	Note         string `gorm:"size:500;default:''"`
 	CreatedAt    time.Time
 	CreatedBy    string `gorm:"size:100;default:''"`
 	Deleted      bool   `gorm:"default:false"`
@@ -108,17 +109,17 @@ type GormRefreshToken struct {
 func (GormRefreshToken) TableName() string { return "sys_refresh_tokens" }
 
 type GormAuditLog struct {
-	ID         uint      `gorm:"primaryKey;autoIncrement"`
-	UserID     uint      `gorm:"index"`
-	Username   string    `gorm:"size:100;default:''"`
-	Action     string    `gorm:"size:200;not null"`
-	Resource   string    `gorm:"size:100;default:''"`
-	ResourceID string    `gorm:"size:100;default:''"`
-	IPAddress  string    `gorm:"size:50;default:''"`
-	UserAgent  string    `gorm:"size:500;default:''"`
-	Request    string    `gorm:"type:text"`
-	Response   string    `gorm:"type:text"`
-	Allowed    bool      `gorm:"default:true"`
+	ID         uint   `gorm:"primaryKey;autoIncrement"`
+	UserID     uint   `gorm:"index"`
+	Username   string `gorm:"size:100;default:''"`
+	Action     string `gorm:"size:200;not null"`
+	Resource   string `gorm:"size:100;default:''"`
+	ResourceID string `gorm:"size:100;default:''"`
+	IPAddress  string `gorm:"size:50;default:''"`
+	UserAgent  string `gorm:"size:500;default:''"`
+	Request    string `gorm:"type:text"`
+	Response   string `gorm:"type:text"`
+	Allowed    bool   `gorm:"default:true"`
 	CreatedAt  time.Time
 }
 

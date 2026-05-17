@@ -7,8 +7,9 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   isLoading: boolean;
   mustChangePassword: boolean;
+  passwordChangeReason: 'one_time_password' | 'password_expired' | null;
   clearMustChangePassword: () => void;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string) => Promise<LoginResponse>;
   logout: () => void;
   hasRole: (role: string) => boolean;
 }
@@ -19,6 +20,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [passwordChangeReason, setPasswordChangeReason] = useState<'one_time_password' | 'password_expired' | null>(null);
 
   const logout = useCallback(() => {
     authApi.logout().catch(() => { });
@@ -43,6 +45,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then(userData => {
         setUser(userData);
         initPermissionService(userData.permissions);
+        const expired = userData.password_expires_at ? new Date(userData.password_expires_at).getTime() <= Date.now() : false;
+        const mustChange = Boolean(userData.one_time_password || expired);
+        setMustChangePassword(mustChange);
+        setPasswordChangeReason(userData.one_time_password ? 'one_time_password' : expired ? 'password_expired' : null);
       })
       .catch(() => {
         setToken(null);
@@ -59,10 +65,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('refresh_token', resp.refresh_token);
     setUser(resp.user);
     initPermissionService(resp.user.permissions);
-    // Handle one-time / forced password change
-    if (resp.one_time_password || resp.require_password_change) {
-      setMustChangePassword(true);
-    }
+    const mustChange = Boolean(
+      resp.must_change_password ||
+      resp.password_expired ||
+      resp.one_time_password ||
+      resp.require_password_change,
+    );
+    setMustChangePassword(mustChange);
+    setPasswordChangeReason(resp.password_change_reason ?? (resp.password_expired ? 'password_expired' : mustChange ? 'one_time_password' : null));
+    return resp;
   }, []);
 
   const hasRole = useCallback(
@@ -83,7 +94,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated: !!user,
         isLoading,
         mustChangePassword,
-        clearMustChangePassword: () => setMustChangePassword(false),
+        passwordChangeReason,
+        clearMustChangePassword: () => {
+          setMustChangePassword(false);
+          setPasswordChangeReason(null);
+        },
         login,
         logout,
         hasRole,

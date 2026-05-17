@@ -11,16 +11,17 @@ import (
 
 // User is the core authentication and authorization subject
 type User struct {
-	ID           uint
-	Username     string
-	PasswordHash string
-	Email        string
-	FullName     string
-	Phone        string
-	Status       string // active | inactive | locked
-	FailedLogins int
-	LockedUntil  *time.Time
-	LastLogin    *time.Time
+	ID                uint
+	Username          string
+	PasswordHash      string
+	PasswordHistory   []string
+	Email             string
+	FullName          string
+	Phone             string
+	Status            string // active | inactive | locked
+	FailedLogins      int
+	LockedUntil       *time.Time
+	LastLogin         *time.Time
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	Deleted           bool
@@ -95,7 +96,7 @@ type RolePermission struct {
 type PermissionDef struct {
 	ID          uint
 	Code        permission.Permission // e.g. "user.read"
-	Name        string               // Display name
+	Name        string                // Display name
 	Description string
 	GroupName   string // e.g. "user", "report"
 	CreatedAt   time.Time

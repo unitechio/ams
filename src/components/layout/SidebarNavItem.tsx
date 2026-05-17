@@ -34,7 +34,7 @@ export function SidebarNavItem({
   const location = useLocation();
   const [isHovered, setIsHovered] = useState(false);
   const [open, setOpen] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hasChildren = !!item.children?.length;
   const isOpen = openMenus[item.id] ?? false;

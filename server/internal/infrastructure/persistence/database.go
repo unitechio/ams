@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"time"
@@ -150,16 +151,35 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 		h, _ := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
 		return string(h)
 	}
+	passwordHistoryJSON := func(hash string) string {
+		payload, _ := json.Marshal([]string{hash})
+		return string(payload)
+	}
 	now := time.Now()
 	users := []struct {
 		user   GormUser
 		roleID uint
 	}{
-		{GormUser{Username: "superadmin", PasswordHash: hashPw("Admin@123"), Email: "superadmin@system.vn", FullName: "Super Administrator", Status: "active", LastLogin: &now}, 1},
-		{GormUser{Username: "admin", PasswordHash: hashPw("Admin@123"), Email: "admin@system.vn", FullName: "Administrator", Status: "active"}, 2},
-		{GormUser{Username: "manager", PasswordHash: hashPw("Admin@123"), Email: "manager@system.vn", FullName: "Nguyễn Văn Quản Lý", Status: "active"}, 3},
-		{GormUser{Username: "operator", PasswordHash: hashPw("Admin@123"), Email: "operator@system.vn", FullName: "Trần Thị Vận Hành", Status: "active"}, 4},
-		{GormUser{Username: "viewer", PasswordHash: hashPw("Admin@123"), Email: "viewer@system.vn", FullName: "Lê Văn Chỉ Xem", Status: "active"}, 5},
+		{func() GormUser {
+			hash := hashPw("Admin@123")
+			return GormUser{Username: "superadmin", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "superadmin@system.vn", FullName: "Super Administrator", Status: "active", LastLogin: &now}
+		}(), 1},
+		{func() GormUser {
+			hash := hashPw("Admin@123")
+			return GormUser{Username: "admin", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "admin@system.vn", FullName: "Administrator", Status: "active"}
+		}(), 2},
+		{func() GormUser {
+			hash := hashPw("Admin@123")
+			return GormUser{Username: "manager", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "manager@system.vn", FullName: "Nguyễn Văn Quản Lý", Status: "active"}
+		}(), 3},
+		{func() GormUser {
+			hash := hashPw("Admin@123")
+			return GormUser{Username: "operator", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "operator@system.vn", FullName: "Trần Thị Vận Hành", Status: "active"}
+		}(), 4},
+		{func() GormUser {
+			hash := hashPw("Admin@123")
+			return GormUser{Username: "viewer", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), Email: "viewer@system.vn", FullName: "Lê Văn Chỉ Xem", Status: "active"}
+		}(), 5},
 	}
 	for _, u := range users {
 		db.Create(&u.user)

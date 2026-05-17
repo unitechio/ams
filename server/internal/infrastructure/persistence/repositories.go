@@ -1,6 +1,7 @@
 package persistence
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -156,10 +157,15 @@ func (r *GormUserRepository) loadRoles(userID uint) []*domain.Role {
 // ─── Mappers ──────────────────────────────────────────────────────────────────
 
 func gormToUser(m *GormUser) *domain.User {
+	passwordHistory := []string{}
+	if m.PasswordHistoryJSON != "" {
+		_ = json.Unmarshal([]byte(m.PasswordHistoryJSON), &passwordHistory)
+	}
 	return &domain.User{
 		ID:                m.ID,
 		Username:          m.Username,
 		PasswordHash:      m.PasswordHash,
+		PasswordHistory:   passwordHistory,
 		Email:             m.Email,
 		FullName:          m.FullName,
 		Phone:             m.Phone,
@@ -178,22 +184,29 @@ func gormToUser(m *GormUser) *domain.User {
 }
 
 func userToGorm(u *domain.User) *GormUser {
+	passwordHistoryJSON := "[]"
+	if len(u.PasswordHistory) > 0 {
+		if payload, err := json.Marshal(u.PasswordHistory); err == nil {
+			passwordHistoryJSON = string(payload)
+		}
+	}
 	return &GormUser{
-		ID:                u.ID,
-		Username:          u.Username,
-		PasswordHash:      u.PasswordHash,
-		Email:             u.Email,
-		FullName:          u.FullName,
-		Phone:             u.Phone,
-		Status:            u.Status,
-		FailedLogins:      u.FailedLogins,
-		LockedUntil:       u.LockedUntil,
-		LastLogin:         u.LastLogin,
-		Deleted:           u.Deleted,
-		PasswordExpiresAt: u.PasswordExpiresAt,
-		OneTimePassword:   u.OneTimePassword,
-		RequireOTP:        u.RequireOTP,
-		TwoFactorEnabled:  u.TwoFactorEnabled,
+		ID:                  u.ID,
+		Username:            u.Username,
+		PasswordHash:        u.PasswordHash,
+		PasswordHistoryJSON: passwordHistoryJSON,
+		Email:               u.Email,
+		FullName:            u.FullName,
+		Phone:               u.Phone,
+		Status:              u.Status,
+		FailedLogins:        u.FailedLogins,
+		LockedUntil:         u.LockedUntil,
+		LastLogin:           u.LastLogin,
+		Deleted:             u.Deleted,
+		PasswordExpiresAt:   u.PasswordExpiresAt,
+		OneTimePassword:     u.OneTimePassword,
+		RequireOTP:          u.RequireOTP,
+		TwoFactorEnabled:    u.TwoFactorEnabled,
 	}
 }
 

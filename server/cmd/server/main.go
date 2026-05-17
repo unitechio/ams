@@ -52,7 +52,7 @@ func main() {
 
 	// ── Usecases ──────────────────────────────────────────────────────────────
 	authUC := usecase.NewAuthUsecase(userRepo, tokenRepo, permRepo, authHistRepo, jwtSvc)
-	userUC := usecase.NewUserUsecase(userRepo)
+	userUC := usecase.NewUserUsecase(userRepo, tokenRepo)
 	roleUC := usecase.NewRoleUsecase(roleRepo)
 	permUC := usecase.NewPermissionUsecase(permRepo)
 	menuUC := usecase.NewMenuUsecase(menuRepo)

@@ -38,7 +38,7 @@ export default function ProtectedRoute({
   anyPermission,
   redirectTo = '/login',
 }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, mustChangePassword } = useAuth();
   const { canAll, canAny, isSuperAdmin } = usePermission();
   const location = useLocation();
 
@@ -57,6 +57,10 @@ export default function ProtectedRoute({
 
   if (!isAuthenticated) {
     return <Navigate to={redirectTo} state={{ from: location }} replace />;
+  }
+
+  if (mustChangePassword && location.pathname !== '/login') {
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // Super admin bypasses all permission checks

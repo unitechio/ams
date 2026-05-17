@@ -98,9 +98,12 @@ const del  = <T>(path: string)               => request<T>('DELETE', path);
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface LoginResponse {
-  access_token:     string;
-  refresh_token:    string;
-  user:             UserInfo;
+  access_token: string;
+  refresh_token: string;
+  user: UserInfo;
+  must_change_password?: boolean;
+  password_expired?: boolean;
+  password_change_reason?: 'one_time_password' | 'password_expired';
   one_time_password?: boolean; // true = user must change password on first login
   require_password_change?: boolean; // alias from some backends
 }
@@ -114,6 +117,9 @@ export interface UserInfo {
   status:      string;
   roles:       string[];
   permissions: string[]; // "perm:scope" pairs or ["*"]
+  password_expires_at?: string;
+  one_time_password?: boolean;
+  require_otp?: boolean;
   two_factor_enabled?: boolean;
 }
 
@@ -239,8 +245,8 @@ export const usersApi = {
     require_otp?: boolean; two_factor_enabled?: boolean;
   }) => put<ApiUser>(`/users/${id}`, data),
   delete: (id: number) => del<void>(`/users/${id}`),
-  resetPassword: (id: number, password: string) =>
-    post<void>(`/users/${id}/reset-password`, { password }),
+  resetPassword: (id: number, password: string, one_time_password = true) =>
+    post<void>(`/users/${id}/reset-password`, { password, one_time_password }),
 };
 
 // ─── Roles API ────────────────────────────────────────────────────────────────
@@ -307,9 +313,21 @@ export const menusApi = {
 // ─── Logs API ─────────────────────────────────────────────────────────────────
 
 export const logsApi = {
-  listAudit: (params?: { search?: string; page?: number; page_size?: number }) => {
+  listAudit: (params?: {
+    search?: string;
+    user?: string;
+    action?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    page_size?: number;
+  }) => {
     const q = new URLSearchParams();
     if (params?.search)    q.set('search',    params.search);
+    if (params?.user)      q.set('user',      params.user);
+    if (params?.action)    q.set('action',    params.action);
+    if (params?.from)      q.set('from',      params.from);
+    if (params?.to)        q.set('to',        params.to);
     if (params?.page)      q.set('page',      String(params.page));
     if (params?.page_size) q.set('page_size', String(params.page_size));
     return get<PaginatedResponse<any>>(`/logs/audit?${q}`);

@@ -270,14 +270,11 @@ export default function EditUserPage() {
 
               <div className="pt-4 border-t border-slate-50 space-y-1.5">
                 <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Hết hạn mật khẩu</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none" />
-                  <DatePicker
-                    value={form.password_expires_at}
-                    onChange={v => setForm(f => ({ ...f, password_expires_at: v || '' }))}
-                    className="pl-9 h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
-                  />
-                </div>
+                <DatePicker
+                  value={form.password_expires_at}
+                  onChange={v => setForm(f => ({ ...f, password_expires_at: v || '' }))}
+                  className="h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
+                />
               </div>
             </div>
           </div>

@@ -16,6 +16,7 @@ import { Guard } from '@/guards/Guard';
 import { PERMISSIONS } from '@/auth/permissions';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { generateRandomPassword, getPasswordPolicyHint } from '@/lib/password';
 
 const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   active: { label: 'Hoạt động', cls: 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-200 dark:ring-emerald-800/50' },
@@ -77,6 +78,7 @@ export default function UsersPage() {
   const [resetTarget, setResetTarget] = useState<ApiUser | null>(null);
   const [saving, setSaving] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [resetOneTimePassword, setResetOneTimePassword] = useState(true);
   const [pendingIds, setPendingIds] = useState<number[]>([]);
 
   const fetchData = useCallback(async () => {
@@ -114,9 +116,9 @@ export default function UsersPage() {
     if (!resetTarget || !newPassword) return;
     setSaving(true);
     try {
-      await usersApi.resetPassword(resetTarget.id, newPassword);
+      await usersApi.resetPassword(resetTarget.id, newPassword, resetOneTimePassword);
       toast.success('Đặt lại mật khẩu thành công');
-      setResetOpen(false); setResetTarget(null); setNewPassword('');
+      setResetOpen(false); setResetTarget(null); setNewPassword(''); setResetOneTimePassword(true);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'Lỗi đặt lại mật khẩu');
     } finally { setSaving(false); }
@@ -211,31 +213,31 @@ export default function UsersPage() {
               <table className="w-full table-fixed text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 h-11">
-                    <th className="w-10 px-4 py-3 align-middle text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <th className="w-12 px-4 py-3 align-middle text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                       #
                     </th>
 
-                    <th className="px-4 py-3 align-middle text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <th className="w-[24%] px-4 py-3 align-middle text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                       Người dùng
                     </th>
 
-                    <th className="hidden md:table-cell px-4 py-3 align-middle text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <th className="hidden md:table-cell w-[28%] px-4 py-3 align-middle text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                       Liên hệ
                     </th>
 
-                    <th className="hidden lg:table-cell px-4 py-3 align-middle text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <th className="hidden lg:table-cell w-[20%] px-4 py-3 align-middle text-left text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                       Vai trò
                     </th>
 
-                    <th className="px-4 py-3 align-middle text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <th className="w-[11%] px-4 py-3 align-middle text-center text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                       Bảo mật
                     </th>
 
-                    <th className="px-4 py-3 align-middle text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-32">
+                    <th className="w-[9%] px-4 py-3 align-middle text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                       Trạng thái
                     </th>
 
-                    <th className="px-4 py-3 align-middle text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider w-28">
+                    <th className="w-[8%] px-4 py-3 align-middle text-right text-[11px] font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                       Thao tác
                     </th>
                   </tr>
@@ -437,7 +439,7 @@ export default function UsersPage() {
       </div>
 
       {/* ─── Reset Password Dialog ───────────────────────────────────────────── */}
-      <Dialog open={resetOpen} onOpenChange={v => { setResetOpen(v); if (!v) setNewPassword(''); }}>
+      <Dialog open={resetOpen} onOpenChange={v => { setResetOpen(v); if (!v) { setNewPassword(''); setResetOneTimePassword(true); } }}>
         <DialogContent className="p-0 border-0 shadow-2xl overflow-hidden max-w-md bg-white dark:bg-slate-900">
           <div className="bg-violet-600 px-6 py-5 relative overflow-hidden">
             <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10 blur-2xl" />
@@ -460,7 +462,7 @@ export default function UsersPage() {
                 <Lock className="absolute left-3 top-2.5 w-4 h-4 text-slate-400 pointer-events-none" />
                 <Input
                   type="password"
-                  placeholder="Tối thiểu 6 ký tự..."
+                  placeholder="Tối thiểu 8 ký tự..."
                   value={newPassword}
                   autoComplete="new-password"
                   onChange={e => setNewPassword(e.target.value)}
@@ -468,6 +470,26 @@ export default function UsersPage() {
                   className="pl-9 h-9 rounded-lg border-slate-200 bg-slate-50/50 text-sm focus-visible:ring-violet-500"
                 />
               </div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] text-slate-400">{getPasswordPolicyHint()}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => setNewPassword(generateRandomPassword())} className="h-8 rounded-lg whitespace-nowrap">
+                  Random pass
+                </Button>
+              </div>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3.5">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={resetOneTimePassword}
+                  onChange={(e) => setResetOneTimePassword(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <p className="text-[12px] font-semibold text-slate-700">Mật khẩu một lần</p>
+                  <p className="text-[11px] text-slate-500">Buộc người dùng đổi mật khẩu ngay ở lần đăng nhập tiếp theo.</p>
+                </div>
+              </label>
             </div>
             <div className="bg-amber-50 border border-amber-100 rounded-lg p-3.5 flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
@@ -481,7 +503,7 @@ export default function UsersPage() {
               className="h-9 px-4 rounded-lg text-slate-500 dark:text-slate-400 font-medium hover:bg-slate-100 dark:hover:bg-slate-800">Hủy</Button>
             <Button
               onClick={handleResetPassword}
-              disabled={saving || newPassword.length < 6}
+              disabled={saving || newPassword.length < 8}
               className="h-9 px-5 rounded-lg bg-violet-600 hover:bg-violet-700 font-medium text-white shadow-sm shadow-violet-200 dark:shadow-none"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Save className="w-4 h-4 mr-1.5" />}
