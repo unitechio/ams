@@ -1,0 +1,15 @@
+CREATE TABLE IF NOT EXISTS sys_login_channels (
+  id BIGSERIAL PRIMARY KEY,
+  code VARCHAR(100) NOT NULL UNIQUE,
+  name VARCHAR(200) NOT NULL,
+  description VARCHAR(500) DEFAULT '',
+  risk_level VARCHAR(50) DEFAULT 'medium',
+  require_mfa BOOLEAN NOT NULL DEFAULT FALSE,
+  allow_password BOOLEAN NOT NULL DEFAULT TRUE,
+  allow_sso BOOLEAN NOT NULL DEFAULT TRUE,
+  trusted_device_ttl_hours INTEGER NOT NULL DEFAULT 720,
+  session_ttl_minutes INTEGER NOT NULL DEFAULT 1440,
+  active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);

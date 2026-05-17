@@ -162,6 +162,7 @@ type AuthUsecase struct {
 	userRepo        domain.UserRepository
 	tokenRepo       domain.TokenRepository
 	clientRepo      domain.ClientRepository
+	channelRepo     domain.LoginChannelRepository
 	ssoProviderRepo domain.SSOProviderRepository
 	permRepo        domain.PermissionRepository
 	authRepo        domain.AuthHistoryRepository
@@ -196,6 +197,7 @@ func NewAuthUsecase(
 	userRepo domain.UserRepository,
 	tokenRepo domain.TokenRepository,
 	clientRepo domain.ClientRepository,
+	channelRepo domain.LoginChannelRepository,
 	permRepo domain.PermissionRepository,
 	authRepo domain.AuthHistoryRepository,
 	jwt *jwtpkg.Service,
@@ -209,6 +211,7 @@ func NewAuthUsecase(
 		userRepo:        userRepo,
 		tokenRepo:       tokenRepo,
 		clientRepo:      clientRepo,
+		channelRepo:     channelRepo,
 		ssoProviderRepo: providerRepo,
 		permRepo:        permRepo,
 		authRepo:        authRepo,
@@ -249,7 +252,7 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 		uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "locked", "Tài khoản đang bị khóa")
 		return nil, ErrAccountLocked
 	}
-	client, channel, deviceName, deviceFingerprint, err := uc.validateClientAccess(user, req)
+	client, loginChannel, deviceName, deviceFingerprint, err := uc.validateClientAccess(user, req)
 	if err != nil {
 		uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", err.Error())
 		return nil, err
@@ -279,6 +282,7 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 			trustedDevice = true
 		}
 	}
+	channelRequiresMFA := loginChannel != nil && loginChannel.RequireMFA
 	if user.TwoFactorEnabled {
 		if strings.TrimSpace(req.OTPCode) == "" {
 			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Thiếu mã TOTP")
@@ -290,7 +294,7 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Mã TOTP không hợp lệ")
 			return nil, errors.New("mã OTP không hợp lệ")
 		}
-	} else if user.RequireOTP && !trustedDevice {
+	} else if (user.RequireOTP || channelRequiresMFA) && !trustedDevice {
 		if strings.TrimSpace(req.OTPCode) == "" {
 			if err := uc.issueEmailOTP(user, "login"); err != nil {
 				return nil, err
@@ -324,7 +328,7 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 		TokenFamily:       generateOpaqueID(16),
 		ClientID:          client.ClientID,
 		Audiences:         cloneStrings(client.Audiences),
-		DeviceName:        fmt.Sprintf("%s [%s]", deviceName, channel),
+		DeviceName:        fmt.Sprintf("%s [%s]", deviceName, loginChannel.Code),
 		DeviceFingerprint: deviceFingerprint,
 		IPAddress:         req.IPAddress,
 		UserAgent:         req.UserAgent,
@@ -553,7 +557,7 @@ func (uc *AuthUsecase) CompleteSSO(providerID, code, state string, req *Complete
 		IPAddress:         req.IPAddress,
 		UserAgent:         req.UserAgent,
 	}
-	client, channel, deviceName, deviceFingerprint, err := uc.validateClientAccess(user, loginReq)
+	client, loginChannel, deviceName, deviceFingerprint, err := uc.validateClientAccess(user, loginReq)
 	if err != nil {
 		uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", err.Error())
 		return nil, err
@@ -564,6 +568,7 @@ func (uc *AuthUsecase) CompleteSSO(providerID, code, state string, req *Complete
 			trustedDevice = true
 		}
 	}
+	channelRequiresMFA := loginChannel != nil && loginChannel.RequireMFA
 	if user.TwoFactorEnabled {
 		if strings.TrimSpace(req.OTPCode) == "" {
 			uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", "Thiếu mã TOTP cho SSO")
@@ -573,7 +578,7 @@ func (uc *AuthUsecase) CompleteSSO(providerID, code, state string, req *Complete
 			uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", "Mã TOTP SSO không hợp lệ")
 			return nil, errors.New("mã OTP không hợp lệ")
 		}
-	} else if user.RequireOTP && !trustedDevice {
+	} else if (user.RequireOTP || channelRequiresMFA) && !trustedDevice {
 		if strings.TrimSpace(req.OTPCode) == "" {
 			if err := uc.issueEmailOTP(user, "sso_login"); err != nil {
 				return nil, err
@@ -596,7 +601,7 @@ func (uc *AuthUsecase) CompleteSSO(providerID, code, state string, req *Complete
 		TokenFamily:       generateOpaqueID(16),
 		ClientID:          client.ClientID,
 		Audiences:         cloneStrings(client.Audiences),
-		DeviceName:        fmt.Sprintf("%s [%s]", deviceName, channel),
+		DeviceName:        fmt.Sprintf("%s [%s]", deviceName, loginChannel.Code),
 		DeviceFingerprint: deviceFingerprint,
 		IPAddress:         req.IPAddress,
 		UserAgent:         req.UserAgent,
@@ -1470,6 +1475,119 @@ func (uc *SSOProviderUsecase) findByID(id uint) (*domain.SSOProvider, error) {
 	return nil, errors.New("provider SSO không tồn tại")
 }
 
+type CreateLoginChannelReq struct {
+	Code                  string `json:"code" binding:"required"`
+	Name                  string `json:"name" binding:"required"`
+	Description           string `json:"description"`
+	RiskLevel             string `json:"risk_level"`
+	RequireMFA            bool   `json:"require_mfa"`
+	AllowPassword         bool   `json:"allow_password"`
+	AllowSSO              bool   `json:"allow_sso"`
+	TrustedDeviceTTLHours int    `json:"trusted_device_ttl_hours"`
+	SessionTTLMinutes     int    `json:"session_ttl_minutes"`
+	Active                bool   `json:"active"`
+}
+
+type UpdateLoginChannelReq = CreateLoginChannelReq
+
+type LoginChannelResponse struct {
+	ID                    uint      `json:"id"`
+	Code                  string    `json:"code"`
+	Name                  string    `json:"name"`
+	Description           string    `json:"description"`
+	RiskLevel             string    `json:"risk_level"`
+	RequireMFA            bool      `json:"require_mfa"`
+	AllowPassword         bool      `json:"allow_password"`
+	AllowSSO              bool      `json:"allow_sso"`
+	TrustedDeviceTTLHours int       `json:"trusted_device_ttl_hours"`
+	SessionTTLMinutes     int       `json:"session_ttl_minutes"`
+	Active                bool      `json:"active"`
+	CreatedAt             time.Time `json:"created_at"`
+}
+
+type LoginChannelUsecase struct {
+	repo domain.LoginChannelRepository
+}
+
+func NewLoginChannelUsecase(repo domain.LoginChannelRepository) *LoginChannelUsecase {
+	return &LoginChannelUsecase{repo: repo}
+}
+
+func (uc *LoginChannelUsecase) List(filters map[string]interface{}, page, pageSize int) (*PaginatedResult[LoginChannelResponse], error) {
+	filters["page"] = page
+	filters["page_size"] = pageSize
+	channels, total, err := uc.repo.List(filters)
+	if err != nil {
+		return nil, err
+	}
+	data := make([]LoginChannelResponse, len(channels))
+	for i, channel := range channels {
+		data[i] = loginChannelToResponse(channel)
+	}
+	return paginate(data, total, page, pageSize), nil
+}
+
+func (uc *LoginChannelUsecase) Create(req *CreateLoginChannelReq) (*LoginChannelResponse, error) {
+	channel := &domain.LoginChannel{
+		Code:                  strings.TrimSpace(req.Code),
+		Name:                  strings.TrimSpace(req.Name),
+		Description:           strings.TrimSpace(req.Description),
+		RiskLevel:             strings.TrimSpace(req.RiskLevel),
+		RequireMFA:            req.RequireMFA,
+		AllowPassword:         req.AllowPassword,
+		AllowSSO:              req.AllowSSO,
+		TrustedDeviceTTLHours: req.TrustedDeviceTTLHours,
+		SessionTTLMinutes:     req.SessionTTLMinutes,
+		Active:                req.Active,
+	}
+	normalizeLoginChannel(channel)
+	if err := uc.repo.Save(channel); err != nil {
+		return nil, err
+	}
+	resp := loginChannelToResponse(channel)
+	return &resp, nil
+}
+
+func (uc *LoginChannelUsecase) Update(id uint, req *UpdateLoginChannelReq) (*LoginChannelResponse, error) {
+	channel, err := uc.findByID(id)
+	if err != nil {
+		return nil, err
+	}
+	channel.Code = strings.TrimSpace(req.Code)
+	channel.Name = strings.TrimSpace(req.Name)
+	channel.Description = strings.TrimSpace(req.Description)
+	channel.RiskLevel = strings.TrimSpace(req.RiskLevel)
+	channel.RequireMFA = req.RequireMFA
+	channel.AllowPassword = req.AllowPassword
+	channel.AllowSSO = req.AllowSSO
+	channel.TrustedDeviceTTLHours = req.TrustedDeviceTTLHours
+	channel.SessionTTLMinutes = req.SessionTTLMinutes
+	channel.Active = req.Active
+	normalizeLoginChannel(channel)
+	if err := uc.repo.Save(channel); err != nil {
+		return nil, err
+	}
+	resp := loginChannelToResponse(channel)
+	return &resp, nil
+}
+
+func (uc *LoginChannelUsecase) Delete(id uint) error {
+	return uc.repo.Delete(id)
+}
+
+func (uc *LoginChannelUsecase) findByID(id uint) (*domain.LoginChannel, error) {
+	channels, _, err := uc.repo.List(map[string]interface{}{"page": 1, "page_size": 500})
+	if err != nil {
+		return nil, err
+	}
+	for _, channel := range channels {
+		if channel.ID == id {
+			return channel, nil
+		}
+	}
+	return nil, errors.New("login channel không tồn tại")
+}
+
 // ─── Role Usecase ─────────────────────────────────────────────────────────────
 
 type CreateRoleReq struct {
@@ -1930,6 +2048,18 @@ func normalizeSSOProvider(provider *domain.SSOProvider) {
 	}
 }
 
+func normalizeLoginChannel(channel *domain.LoginChannel) {
+	if channel.RiskLevel == "" {
+		channel.RiskLevel = "medium"
+	}
+	if channel.TrustedDeviceTTLHours <= 0 {
+		channel.TrustedDeviceTTLHours = 720
+	}
+	if channel.SessionTTLMinutes <= 0 {
+		channel.SessionTTLMinutes = 1440
+	}
+}
+
 func clientToResponse(client *domain.AuthClient) ClientResponse {
 	return ClientResponse{
 		ID:           client.ID,
@@ -1968,6 +2098,23 @@ func ssoProviderToResponse(provider *domain.SSOProvider) SSOProviderResponse {
 		AllowAutoProvision: provider.AllowAutoProvision,
 		Icon:               provider.Icon,
 		CreatedAt:          provider.CreatedAt,
+	}
+}
+
+func loginChannelToResponse(channel *domain.LoginChannel) LoginChannelResponse {
+	return LoginChannelResponse{
+		ID:                    channel.ID,
+		Code:                  channel.Code,
+		Name:                  channel.Name,
+		Description:           channel.Description,
+		RiskLevel:             channel.RiskLevel,
+		RequireMFA:            channel.RequireMFA,
+		AllowPassword:         channel.AllowPassword,
+		AllowSSO:              channel.AllowSSO,
+		TrustedDeviceTTLHours: channel.TrustedDeviceTTLHours,
+		SessionTTLMinutes:     channel.SessionTTLMinutes,
+		Active:                channel.Active,
+		CreatedAt:             channel.CreatedAt,
 	}
 }
 
@@ -2189,40 +2336,57 @@ func domainToSSOProvider(provider *domain.SSOProvider) sso.Provider {
 	}
 }
 
-func (uc *AuthUsecase) validateClientAccess(user *domain.User, req *LoginRequest) (*domain.AuthClient, string, string, string, error) {
+func (uc *AuthUsecase) validateClientAccess(user *domain.User, req *LoginRequest) (*domain.AuthClient, *domain.LoginChannel, string, string, error) {
 	clientID := strings.TrimSpace(req.ClientID)
 	if clientID == "" {
 		clientID = "web_portal"
 	}
 	if uc.clientRepo == nil {
-		return nil, "", "", "", errors.New("client registry chưa sẵn sàng")
+		return nil, nil, "", "", errors.New("client registry chưa sẵn sàng")
 	}
 	client, err := uc.clientRepo.FindByClientID(clientID)
 	if err != nil || !client.Active {
-		return nil, "", "", "", errors.New("client_id không hợp lệ hoặc chưa được đăng ký")
+		return nil, nil, "", "", errors.New("client_id không hợp lệ hoặc chưa được đăng ký")
 	}
 	grantType := strings.TrimSpace(req.GrantType)
 	if grantType == "" {
 		grantType = "password"
 	}
 	if !containsOrEmpty(client.GrantTypes, grantType) {
-		return nil, "", "", "", errors.New("grant_type không được hỗ trợ cho client này")
+		return nil, nil, "", "", errors.New("grant_type không được hỗ trợ cho client này")
 	}
 	if !client.Public && strings.TrimSpace(req.ClientSecret) != client.ClientSecret {
-		return nil, "", "", "", errors.New("client_secret không hợp lệ")
+		return nil, nil, "", "", errors.New("client_secret không hợp lệ")
 	}
 	channel := strings.TrimSpace(req.Channel)
 	if channel == "" && len(client.Channels) > 0 {
 		channel = client.Channels[0]
 	}
 	if !containsOrEmpty(client.Channels, channel) {
-		return nil, "", "", "", errors.New("channel không hợp lệ cho client này")
+		return nil, nil, "", "", errors.New("channel không hợp lệ cho client này")
 	}
 	if !containsOrEmpty(user.AllowedClients, clientID) {
-		return nil, "", "", "", errors.New("tài khoản này không được phép đăng nhập vào client hiện tại")
+		return nil, nil, "", "", errors.New("tài khoản này không được phép đăng nhập vào client hiện tại")
 	}
 	if !containsOrEmpty(user.AllowedChannels, channel) {
-		return nil, "", "", "", errors.New("tài khoản này không được phép đăng nhập qua kênh hiện tại")
+		return nil, nil, "", "", errors.New("tài khoản này không được phép đăng nhập qua kênh hiện tại")
+	}
+	loginChannel := &domain.LoginChannel{Code: channel, Name: channel, Active: true, AllowPassword: true, AllowSSO: true}
+	if uc.channelRepo != nil {
+		resolved, channelErr := uc.channelRepo.FindByCode(channel)
+		if channelErr != nil {
+			return nil, nil, "", "", errors.New("login channel không tồn tại hoặc chưa được cấu hình")
+		}
+		if !resolved.Active {
+			return nil, nil, "", "", errors.New("login channel đang bị vô hiệu hóa")
+		}
+		if grantType == "password" && !resolved.AllowPassword {
+			return nil, nil, "", "", errors.New("login channel này không cho phép password login")
+		}
+		if grantType == "authorization_code" && !resolved.AllowSSO {
+			return nil, nil, "", "", errors.New("login channel này không cho phép SSO login")
+		}
+		loginChannel = resolved
 	}
 	deviceName := strings.TrimSpace(req.DeviceName)
 	if deviceName == "" {
@@ -2232,7 +2396,7 @@ func (uc *AuthUsecase) validateClientAccess(user *domain.User, req *LoginRequest
 	if deviceFingerprint == "" {
 		deviceFingerprint = fmt.Sprintf("%s|%s|%s", clientID, req.IPAddress, req.UserAgent)
 	}
-	return client, channel, deviceName, deviceFingerprint, nil
+	return client, loginChannel, deviceName, deviceFingerprint, nil
 }
 
 // ─── Log Usecase ─────────────────────────────────────────────────────────────

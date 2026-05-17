@@ -25,6 +25,7 @@ func Setup(
 	userH *UserHandler,
 	clientH *ClientHandler,
 	ssoProviderH *SSOProviderHandler,
+	loginChannelH *LoginChannelHandler,
 	roleH *RoleHandler,
 	permH *PermissionHandler,
 	menuH *MenuHandler,
@@ -249,6 +250,27 @@ func Setup(
 				middleware.RequirePermission(permission.PermissionClientDelete),
 				middleware.RequireStepUp(jwtSvc),
 				ssoProviderH.Delete,
+			)
+		}
+
+		loginChannels := auth.Group("/login-channels")
+		loginChannels.Use(middleware.RequirePermission(permission.PermissionChannelRead))
+		{
+			loginChannels.GET("", loginChannelH.List)
+			loginChannels.POST("",
+				middleware.RequirePermission(permission.PermissionChannelCreate),
+				middleware.RequireStepUp(jwtSvc),
+				loginChannelH.Create,
+			)
+			loginChannels.PUT("/:id",
+				middleware.RequirePermission(permission.PermissionChannelUpdate),
+				middleware.RequireStepUp(jwtSvc),
+				loginChannelH.Update,
+			)
+			loginChannels.DELETE("/:id",
+				middleware.RequirePermission(permission.PermissionChannelDelete),
+				middleware.RequireStepUp(jwtSvc),
+				loginChannelH.Delete,
 			)
 		}
 

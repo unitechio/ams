@@ -904,6 +904,108 @@ func ssoProviderToGorm(provider *domain.SSOProvider) *GormSSOProvider {
 	}
 }
 
+// ─── Login Channel Repository ───────────────────────────────────────────────
+
+type GormLoginChannelRepository struct{ db *gorm.DB }
+
+func NewGormLoginChannelRepository(db *gorm.DB) *GormLoginChannelRepository {
+	return &GormLoginChannelRepository{db}
+}
+
+func (r *GormLoginChannelRepository) FindByCode(code string) (*domain.LoginChannel, error) {
+	var model GormLoginChannel
+	if err := r.db.Where("code = ?", code).First(&model).Error; err != nil {
+		return nil, err
+	}
+	return gormToLoginChannel(&model), nil
+}
+
+func (r *GormLoginChannelRepository) List(filters map[string]interface{}) ([]*domain.LoginChannel, int64, error) {
+	q := r.db.Model(&GormLoginChannel{})
+	if search, ok := filters["search"].(string); ok && strings.TrimSpace(search) != "" {
+		like := "%" + strings.TrimSpace(search) + "%"
+		q = q.Where("code ILIKE ? OR name ILIKE ? OR description ILIKE ?", like, like, like)
+	}
+	if riskLevel, ok := filters["risk_level"].(string); ok && strings.TrimSpace(riskLevel) != "" {
+		q = q.Where("risk_level = ?", strings.TrimSpace(riskLevel))
+	}
+	if active, ok := filters["active"].(string); ok && strings.TrimSpace(active) != "" {
+		q = q.Where("active = ?", strings.EqualFold(active, "true"))
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	page, _ := filters["page"].(int)
+	pageSize, _ := filters["page_size"].(int)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	var models []GormLoginChannel
+	if err := q.Order("id DESC").Offset(offset).Limit(pageSize).Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+	result := make([]*domain.LoginChannel, len(models))
+	for i, item := range models {
+		result[i] = gormToLoginChannel(&item)
+	}
+	return result, total, nil
+}
+
+func (r *GormLoginChannelRepository) Save(channel *domain.LoginChannel) error {
+	model := loginChannelToGorm(channel)
+	var err error
+	if model.ID == 0 {
+		err = r.db.Create(model).Error
+	} else {
+		err = r.db.Save(model).Error
+	}
+	channel.ID = model.ID
+	return err
+}
+
+func (r *GormLoginChannelRepository) Delete(id uint) error {
+	return r.db.Delete(&GormLoginChannel{}, id).Error
+}
+
+func gormToLoginChannel(model *GormLoginChannel) *domain.LoginChannel {
+	return &domain.LoginChannel{
+		ID:                    model.ID,
+		Code:                  model.Code,
+		Name:                  model.Name,
+		Description:           model.Description,
+		RiskLevel:             model.RiskLevel,
+		RequireMFA:            model.RequireMFA,
+		AllowPassword:         model.AllowPassword,
+		AllowSSO:              model.AllowSSO,
+		TrustedDeviceTTLHours: model.TrustedDeviceTTLHours,
+		SessionTTLMinutes:     model.SessionTTLMinutes,
+		Active:                model.Active,
+		CreatedAt:             model.CreatedAt,
+		UpdatedAt:             model.UpdatedAt,
+	}
+}
+
+func loginChannelToGorm(channel *domain.LoginChannel) *GormLoginChannel {
+	return &GormLoginChannel{
+		ID:                    channel.ID,
+		Code:                  channel.Code,
+		Name:                  channel.Name,
+		Description:           channel.Description,
+		RiskLevel:             channel.RiskLevel,
+		RequireMFA:            channel.RequireMFA,
+		AllowPassword:         channel.AllowPassword,
+		AllowSSO:              channel.AllowSSO,
+		TrustedDeviceTTLHours: channel.TrustedDeviceTTLHours,
+		SessionTTLMinutes:     channel.SessionTTLMinutes,
+		Active:                channel.Active,
+	}
+}
+
 // ─── Permission Repository ────────────────────────────────────────────────────
 
 func NewGormPermissionRepository(db *gorm.DB) *GormPermissionRepository {

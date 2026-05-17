@@ -39,6 +39,7 @@ func Migrate(db *gorm.DB) {
 		&GormRefreshToken{},
 		&GormAuthClient{},
 		&GormSSOProvider{},
+		&GormLoginChannel{},
 		&GormAuditLog{},
 		&GormAuthHistory{},
 	)
@@ -78,6 +79,7 @@ func SyncMenus(db *gorm.DB) {
 		{ID: 5, Title: "Permission", URL: "/permissions", SortOrder: 780, Icon: "Key", PermissionCode: string(permission.PermissionPermRead), ParentID: &u20},
 		{ID: 9, Title: "OAuth Clients", URL: "/auth-clients", SortOrder: 770, Icon: "AppWindow", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
 		{ID: 12, Title: "SSO Providers", URL: "/sso-providers", SortOrder: 765, Icon: "Waypoints", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
+		{ID: 13, Title: "Login Channels", URL: "/login-channels", SortOrder: 762, Icon: "Workflow", PermissionCode: string(permission.PermissionChannelRead), ParentID: &u20},
 		{ID: 11, Title: "Service Accounts", URL: "/service-accounts", SortOrder: 760, Icon: "Bot", PermissionCode: string(permission.PermissionServiceRead), ParentID: &u20},
 
 		{ID: 30, Title: "Nhật ký", URL: "#", SortOrder: 500, Icon: "FileText", PermissionCode: ""},
@@ -254,6 +256,16 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 	}
 	db.CreateInBatches(clients, 20)
 
+	channels := []GormLoginChannel{
+		{Code: "web", Name: "Web Portal", Description: "Browser-based user login", RiskLevel: "medium", RequireMFA: false, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 720, SessionTTLMinutes: 1440, Active: true},
+		{Code: "crm", Name: "CRM Portal", Description: "Backoffice CRM login", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 336, SessionTTLMinutes: 720, Active: true},
+		{Code: "mobile", Name: "Mobile App", Description: "Native mobile application login", RiskLevel: "medium", RequireMFA: false, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 1440, SessionTTLMinutes: 43200, Active: true},
+		{Code: "service", Name: "Internal API / Service", Description: "Machine-to-machine integration", RiskLevel: "high", RequireMFA: false, AllowPassword: false, AllowSSO: false, TrustedDeviceTTLHours: 0, SessionTTLMinutes: 60, Active: true},
+		{Code: "kiosk", Name: "Kiosk", Description: "Public or semi-trusted kiosk devices", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: false, TrustedDeviceTTLHours: 24, SessionTTLMinutes: 120, Active: true},
+		{Code: "partner", Name: "Partner Portal", Description: "External partner access", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 168, SessionTTLMinutes: 480, Active: true},
+	}
+	db.CreateInBatches(channels, 20)
+
 	providers := []GormSSOProvider{
 		{
 			ProviderID:         "google",
@@ -309,7 +321,7 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 // ResetSequences resets PostgreSQL SERIAL sequences to the max ID found in each table.
 // This is necessary after seeding records with manual ID values.
 func ResetSequences(db *gorm.DB) {
-	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_auth_clients", "sys_sso_providers", "sys_audit_logs", "sys_auth_histories"}
+	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_auth_clients", "sys_sso_providers", "sys_login_channels", "sys_audit_logs", "sys_auth_histories"}
 	for _, table := range tables {
 		db.Exec(fmt.Sprintf("SELECT setval(pg_get_serial_sequence('%s', 'id'), COALESCE((SELECT MAX(id) FROM %s), 1))", table, table))
 	}

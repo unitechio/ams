@@ -80,6 +80,22 @@ type SSOProvider struct {
 	UpdatedAt          time.Time
 }
 
+type LoginChannel struct {
+	ID                    uint
+	Code                  string
+	Name                  string
+	Description           string
+	RiskLevel             string
+	RequireMFA            bool
+	AllowPassword         bool
+	AllowSSO              bool
+	TrustedDeviceTTLHours int
+	SessionTTLMinutes     int
+	Active                bool
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
 // EffectivePermissions resolves all permissions from user's roles
 func (u *User) EffectivePermissions() *permission.PermissionSet {
 	var eps []permission.EffectivePermission
@@ -303,6 +319,13 @@ type SSOProviderRepository interface {
 	FindByProviderID(providerID string) (*SSOProvider, error)
 	List(filters map[string]interface{}) ([]*SSOProvider, int64, error)
 	Save(provider *SSOProvider) error
+	Delete(id uint) error
+}
+
+type LoginChannelRepository interface {
+	FindByCode(code string) (*LoginChannel, error)
+	List(filters map[string]interface{}) ([]*LoginChannel, int64, error)
+	Save(channel *LoginChannel) error
 	Delete(id uint) error
 }
 

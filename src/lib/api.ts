@@ -283,6 +283,21 @@ export interface AdminSSOProvider {
   created_at: string;
 }
 
+export interface LoginChannel {
+  id: number;
+  code: string;
+  name: string;
+  description: string;
+  risk_level: string;
+  require_mfa: boolean;
+  allow_password: boolean;
+  allow_sso: boolean;
+  trusted_device_ttl_hours: number;
+  session_ttl_minutes: number;
+  active: boolean;
+  created_at: string;
+}
+
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -419,6 +434,21 @@ export const ssoProvidersAdminApi = {
   create: (data: Omit<AdminSSOProvider, 'id' | 'created_at'>) => post<AdminSSOProvider>('/sso-providers', data),
   update: (id: number, data: Omit<AdminSSOProvider, 'id' | 'created_at'>) => put<AdminSSOProvider>(`/sso-providers/${id}`, data),
   delete: (id: number) => del<void>(`/sso-providers/${id}`),
+};
+
+export const loginChannelsApi = {
+  list: (params?: { search?: string; risk_level?: string; active?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.risk_level) q.set('risk_level', params.risk_level);
+    if (params?.active) q.set('active', params.active);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.page_size) q.set('page_size', String(params.page_size));
+    return get<PaginatedResponse<LoginChannel>>(`/login-channels?${q}`);
+  },
+  create: (data: Omit<LoginChannel, 'id' | 'created_at'>) => post<LoginChannel>('/login-channels', data),
+  update: (id: number, data: Omit<LoginChannel, 'id' | 'created_at'>) => put<LoginChannel>(`/login-channels/${id}`, data),
+  delete: (id: number) => del<void>(`/login-channels/${id}`),
 };
 
 // ─── Users API ────────────────────────────────────────────────────────────────

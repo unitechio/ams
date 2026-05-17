@@ -172,6 +172,24 @@ type GormSSOProvider struct {
 
 func (GormSSOProvider) TableName() string { return "sys_sso_providers" }
 
+type GormLoginChannel struct {
+	ID                    uint   `gorm:"primaryKey;autoIncrement"`
+	Code                  string `gorm:"uniqueIndex;size:100;not null"`
+	Name                  string `gorm:"size:200;not null"`
+	Description           string `gorm:"size:500;default:''"`
+	RiskLevel             string `gorm:"size:50;default:'medium'"`
+	RequireMFA            bool   `gorm:"default:false"`
+	AllowPassword         bool   `gorm:"default:true"`
+	AllowSSO              bool   `gorm:"default:true"`
+	TrustedDeviceTTLHours int    `gorm:"default:720"`
+	SessionTTLMinutes     int    `gorm:"default:1440"`
+	Active                bool   `gorm:"default:true"`
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+func (GormLoginChannel) TableName() string { return "sys_login_channels" }
+
 type GormAuditLog struct {
 	ID         uint   `gorm:"primaryKey;autoIncrement"`
 	UserID     uint   `gorm:"index"`

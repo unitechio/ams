@@ -94,6 +94,12 @@ const (
 	PermissionServiceCreate Permission = "service.create"
 	PermissionServiceUpdate Permission = "service.update"
 	PermissionServiceDelete Permission = "service.delete"
+
+	// ── Login Channel Management
+	PermissionChannelRead   Permission = "channel.read"
+	PermissionChannelCreate Permission = "channel.create"
+	PermissionChannelUpdate Permission = "channel.update"
+	PermissionChannelDelete Permission = "channel.delete"
 )
 
 // ─── Permission Group Registry ────────────────────────────────────────────────
@@ -153,6 +159,11 @@ var Registry = []PermissionGroup{
 		Name:        "service",
 		Description: "Quản lý service account và machine-to-machine clients",
 		Permissions: []Permission{PermissionServiceRead, PermissionServiceCreate, PermissionServiceUpdate, PermissionServiceDelete},
+	},
+	{
+		Name:        "channel",
+		Description: "Quản lý login channel, risk level và channel policy",
+		Permissions: []Permission{PermissionChannelRead, PermissionChannelCreate, PermissionChannelUpdate, PermissionChannelDelete},
 	},
 }
 
