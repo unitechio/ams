@@ -36,7 +36,7 @@ func NewService(secret string, accessTTL, refreshTTL time.Duration) *Service {
 	}
 }
 
-func (s *Service) GenerateAccessToken(userID uint, username string, roles []string, sessionID, clientID string) (string, error) {
+func (s *Service) GenerateAccessToken(userID uint, username string, roles []string, sessionID, clientID string, audiences []string) (string, error) {
 	claims := &Claims{
 		UserID:    userID,
 		Username:  username,
@@ -47,6 +47,7 @@ func (s *Service) GenerateAccessToken(userID uint, username string, roles []stri
 			ExpiresAt: gojwt.NewNumericDate(time.Now().Add(s.accessTokenTTL)),
 			IssuedAt:  gojwt.NewNumericDate(time.Now()),
 			Subject:   username,
+			Audience:  audiences,
 		},
 	}
 	token := gojwt.NewWithClaims(gojwt.SigningMethodHS256, claims)

@@ -82,6 +82,18 @@ const (
 	// ── Device Management
 	PermissionDeviceRead   Permission = "device.read"
 	PermissionDeviceRevoke Permission = "device.revoke"
+
+	// ── OAuth Client Management
+	PermissionClientRead   Permission = "client.read"
+	PermissionClientCreate Permission = "client.create"
+	PermissionClientUpdate Permission = "client.update"
+	PermissionClientDelete Permission = "client.delete"
+
+	// ── Service Account Management
+	PermissionServiceRead   Permission = "service.read"
+	PermissionServiceCreate Permission = "service.create"
+	PermissionServiceUpdate Permission = "service.update"
+	PermissionServiceDelete Permission = "service.delete"
 )
 
 // ─── Permission Group Registry ────────────────────────────────────────────────
@@ -131,6 +143,16 @@ var Registry = []PermissionGroup{
 		Name:        "device",
 		Description: "Quản lý thiết bị và phiên đăng nhập",
 		Permissions: []Permission{PermissionDeviceRead, PermissionDeviceRevoke},
+	},
+	{
+		Name:        "client",
+		Description: "Quản lý OAuth clients và redirect policy",
+		Permissions: []Permission{PermissionClientRead, PermissionClientCreate, PermissionClientUpdate, PermissionClientDelete},
+	},
+	{
+		Name:        "service",
+		Description: "Quản lý service account và machine-to-machine clients",
+		Permissions: []Permission{PermissionServiceRead, PermissionServiceCreate, PermissionServiceUpdate, PermissionServiceDelete},
 	},
 }
 

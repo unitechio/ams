@@ -23,6 +23,8 @@ const UserRolesPage = lazy(() => import("@/pages/UserRolesPage"));
 const AuthHistoryPage = lazy(() => import("@/pages/AuthHistoryPage"));
 const AuditLogPage = lazy(() => import("@/pages/AuditLogPage"));
 const DevicesPage = lazy(() => import("@/pages/DevicesPage"));
+const AuthClientsPage = lazy(() => import("@/pages/AuthClientsPage"));
+const ServiceAccountsPage = lazy(() => import("@/pages/ServiceAccountsPage"));
 
 export const routes: RouteObject[] = [
   {
@@ -145,6 +147,22 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute permissions={[PERMISSIONS.DEVICE_READ]}>
             {Loadable(DevicesPage)({})}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "auth-clients",
+        element: (
+          <ProtectedRoute permissions={[PERMISSIONS.CLIENT_READ]}>
+            {Loadable(AuthClientsPage)({})}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "service-accounts",
+        element: (
+          <ProtectedRoute permissions={[PERMISSIONS.SERVICE_READ]}>
+            {Loadable(ServiceAccountsPage)({})}
           </ProtectedRoute>
         ),
       },

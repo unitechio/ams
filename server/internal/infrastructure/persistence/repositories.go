@@ -12,6 +12,25 @@ import (
 	"gorm.io/gorm"
 )
 
+func decodeJSONList(raw string) []string {
+	values := []string{}
+	if raw != "" {
+		_ = json.Unmarshal([]byte(raw), &values)
+	}
+	return values
+}
+
+func encodeJSONList(values []string) string {
+	if len(values) == 0 {
+		return "[]"
+	}
+	payload, err := json.Marshal(values)
+	if err != nil {
+		return "[]"
+	}
+	return string(payload)
+}
+
 // ─── User Repository ──────────────────────────────────────────────────────────
 
 type GormUserRepository struct{ db *gorm.DB }
@@ -668,6 +687,110 @@ func (r *GormTokenRepository) FindTrustedDevice(userID uint, clientID, fingerpri
 		Revoked:           m.Revoked,
 		CreatedAt:         m.CreatedAt,
 	}, nil
+}
+
+// ─── Auth Client Repository ──────────────────────────────────────────────────
+
+type GormClientRepository struct{ db *gorm.DB }
+
+func NewGormClientRepository(db *gorm.DB) *GormClientRepository { return &GormClientRepository{db} }
+
+func (r *GormClientRepository) FindByClientID(clientID string) (*domain.AuthClient, error) {
+	var model GormAuthClient
+	if err := r.db.Where("client_id = ?", clientID).First(&model).Error; err != nil {
+		return nil, err
+	}
+	return gormToClient(&model), nil
+}
+
+func (r *GormClientRepository) List(filters map[string]interface{}) ([]*domain.AuthClient, int64, error) {
+	q := r.db.Model(&GormAuthClient{})
+	if search, ok := filters["search"].(string); ok && strings.TrimSpace(search) != "" {
+		like := "%" + strings.TrimSpace(search) + "%"
+		q = q.Where("client_id ILIKE ? OR name ILIKE ? OR app_type ILIKE ?", like, like, like)
+	}
+	if appType, ok := filters["app_type"].(string); ok && strings.TrimSpace(appType) != "" {
+		q = q.Where("app_type = ?", strings.TrimSpace(appType))
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	page, _ := filters["page"].(int)
+	pageSize, _ := filters["page_size"].(int)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var models []GormAuthClient
+	if err := q.Order("id DESC").Offset(offset).Limit(pageSize).Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+	result := make([]*domain.AuthClient, len(models))
+	for i, item := range models {
+		result[i] = gormToClient(&item)
+	}
+	return result, total, nil
+}
+
+func (r *GormClientRepository) Save(client *domain.AuthClient) error {
+	model := clientToGorm(client)
+	var err error
+	if model.ID == 0 {
+		err = r.db.Create(model).Error
+	} else {
+		err = r.db.Save(model).Error
+	}
+	client.ID = model.ID
+	return err
+}
+
+func (r *GormClientRepository) Delete(id uint) error {
+	return r.db.Delete(&GormAuthClient{}, id).Error
+}
+
+func gormToClient(model *GormAuthClient) *domain.AuthClient {
+	return &domain.AuthClient{
+		ID:           model.ID,
+		ClientID:     model.ClientID,
+		ClientSecret: model.ClientSecret,
+		Name:         model.Name,
+		Description:  model.Description,
+		AppType:      model.AppType,
+		Public:       model.Public,
+		PKCERequired: model.PKCERequired,
+		Active:       model.Active,
+		GrantTypes:   decodeJSONList(model.GrantTypesJSON),
+		RedirectURIs: decodeJSONList(model.RedirectURIsJSON),
+		Audiences:    decodeJSONList(model.AudiencesJSON),
+		Channels:     decodeJSONList(model.ChannelsJSON),
+		TrustedTypes: decodeJSONList(model.TrustedTypesJSON),
+		CreatedAt:    model.CreatedAt,
+		UpdatedAt:    model.UpdatedAt,
+	}
+}
+
+func clientToGorm(client *domain.AuthClient) *GormAuthClient {
+	return &GormAuthClient{
+		ID:               client.ID,
+		ClientID:         client.ClientID,
+		ClientSecret:     client.ClientSecret,
+		Name:             client.Name,
+		Description:      client.Description,
+		AppType:          client.AppType,
+		Public:           client.Public,
+		PKCERequired:     client.PKCERequired,
+		Active:           client.Active,
+		GrantTypesJSON:   encodeJSONList(client.GrantTypes),
+		RedirectURIsJSON: encodeJSONList(client.RedirectURIs),
+		AudiencesJSON:    encodeJSONList(client.Audiences),
+		ChannelsJSON:     encodeJSONList(client.Channels),
+		TrustedTypesJSON: encodeJSONList(client.TrustedTypes),
+	}
 }
 
 // ─── Permission Repository ────────────────────────────────────────────────────

@@ -23,6 +23,7 @@ func Setup(
 	auditLogger middleware.AuditLogger,
 	authH *AuthHandler,
 	userH *UserHandler,
+	clientH *ClientHandler,
 	roleH *RoleHandler,
 	permH *PermissionHandler,
 	menuH *MenuHandler,
@@ -52,6 +53,7 @@ func Setup(
 	public := api.Group("/auth")
 	{
 		public.POST("/login", authH.Login)
+		public.POST("/token", authH.Token)
 		public.POST("/refresh", authH.Refresh)
 		public.POST("/forgot-password", authH.ForgotPassword)
 		public.POST("/reset-password", authH.ResetPasswordWithToken)
@@ -181,6 +183,48 @@ func Setup(
 			menus.DELETE("/:id",
 				middleware.RequirePermission(permission.PermissionMenuDelete),
 				menuH.Delete,
+			)
+		}
+
+		clients := auth.Group("/auth-clients")
+		clients.Use(middleware.RequirePermission(permission.PermissionClientRead))
+		{
+			clients.GET("", clientH.List)
+			clients.POST("",
+				middleware.RequirePermission(permission.PermissionClientCreate),
+				middleware.RequireStepUp(jwtSvc),
+				clientH.Create,
+			)
+			clients.PUT("/:id",
+				middleware.RequirePermission(permission.PermissionClientUpdate),
+				middleware.RequireStepUp(jwtSvc),
+				clientH.Update,
+			)
+			clients.DELETE("/:id",
+				middleware.RequirePermission(permission.PermissionClientDelete),
+				middleware.RequireStepUp(jwtSvc),
+				clientH.Delete,
+			)
+		}
+
+		serviceAccounts := auth.Group("/service-accounts")
+		serviceAccounts.Use(middleware.RequirePermission(permission.PermissionServiceRead))
+		{
+			serviceAccounts.GET("", clientH.List)
+			serviceAccounts.POST("",
+				middleware.RequirePermission(permission.PermissionServiceCreate),
+				middleware.RequireStepUp(jwtSvc),
+				clientH.Create,
+			)
+			serviceAccounts.PUT("/:id",
+				middleware.RequirePermission(permission.PermissionServiceUpdate),
+				middleware.RequireStepUp(jwtSvc),
+				clientH.Update,
+			)
+			serviceAccounts.DELETE("/:id",
+				middleware.RequirePermission(permission.PermissionServiceDelete),
+				middleware.RequireStepUp(jwtSvc),
+				clientH.Delete,
 			)
 		}
 

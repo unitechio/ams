@@ -37,6 +37,7 @@ func Migrate(db *gorm.DB) {
 		&GormPermissionLine{},
 		&GormMenu{},
 		&GormRefreshToken{},
+		&GormAuthClient{},
 		&GormAuditLog{},
 		&GormAuthHistory{},
 	)
@@ -74,6 +75,8 @@ func SyncMenus(db *gorm.DB) {
 		{ID: 20, Title: "Cấu hình", URL: "#", SortOrder: 800, Icon: "Wrench", PermissionCode: ""},
 		{ID: 4, Title: "Menu Sidebar", URL: "/menus", SortOrder: 790, Icon: "Menu", PermissionCode: string(permission.PermissionMenuRead), ParentID: &u20},
 		{ID: 5, Title: "Permission", URL: "/permissions", SortOrder: 780, Icon: "Key", PermissionCode: string(permission.PermissionPermRead), ParentID: &u20},
+		{ID: 9, Title: "OAuth Clients", URL: "/auth-clients", SortOrder: 770, Icon: "AppWindow", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
+		{ID: 11, Title: "Service Accounts", URL: "/service-accounts", SortOrder: 760, Icon: "Bot", PermissionCode: string(permission.PermissionServiceRead), ParentID: &u20},
 
 		{ID: 30, Title: "Nhật ký", URL: "#", SortOrder: 500, Icon: "FileText", PermissionCode: ""},
 		{ID: 31, Title: "Lịch sử Login", URL: "/logs/auth", SortOrder: 490, Icon: "History", PermissionCode: string(permission.PermissionAuthRead), ParentID: &u30},
@@ -187,6 +190,68 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 		db.Create(&GormUserRole{UserID: u.user.ID, RoleID: u.roleID})
 	}
 
+	clients := []GormAuthClient{
+		{
+			ClientID:         "web_portal",
+			Name:             "Web Portal",
+			Description:      "Public SPA for the admin web application",
+			AppType:          "web_app",
+			Public:           true,
+			PKCERequired:     true,
+			Active:           true,
+			GrantTypesJSON:   `["password","refresh_token"]`,
+			RedirectURIsJSON: `["https://app.company.com/callback"]`,
+			AudiencesJSON:    `["web-api"]`,
+			ChannelsJSON:     `["web"]`,
+			TrustedTypesJSON: `["browser"]`,
+		},
+		{
+			ClientID:         "crm_portal",
+			ClientSecret:     "crm_portal_secret",
+			Name:             "CRM Portal",
+			Description:      "Confidential client for CRM backoffice",
+			AppType:          "admin_portal",
+			Public:           false,
+			PKCERequired:     false,
+			Active:           true,
+			GrantTypesJSON:   `["password","refresh_token"]`,
+			RedirectURIsJSON: `["https://crm.company.com/callback"]`,
+			AudiencesJSON:    `["crm-api"]`,
+			ChannelsJSON:     `["crm","web"]`,
+			TrustedTypesJSON: `["browser","desktop"]`,
+		},
+		{
+			ClientID:         "mobile_app_tpv_public",
+			Name:             "Mobile App",
+			Description:      "Public mobile application client with PKCE",
+			AppType:          "mobile_app",
+			Public:           true,
+			PKCERequired:     true,
+			Active:           true,
+			GrantTypesJSON:   `["password","refresh_token"]`,
+			RedirectURIsJSON: `["myapp://oauth/callback"]`,
+			AudiencesJSON:    `["mobile-api"]`,
+			ChannelsJSON:     `["mobile"]`,
+			TrustedTypesJSON: `["mobile"]`,
+		},
+		{
+			ClientID:         "payment_service",
+			ClientSecret:     "payment_service_secret",
+			Name:             "Payment Service",
+			Description:      "Service account client for machine-to-machine payment jobs",
+			AppType:          "internal_service",
+			Public:           false,
+			PKCERequired:     false,
+			Active:           true,
+			GrantTypesJSON:   `["client_credentials"]`,
+			RedirectURIsJSON: `[]`,
+			AudiencesJSON:    `["payment-api"]`,
+			ChannelsJSON:     `["service"]`,
+			TrustedTypesJSON: `["server"]`,
+		},
+	}
+	db.CreateInBatches(clients, 20)
+
 	log.Println("✅ Seed complete")
 	log.Println("   👤 superadmin / Admin@123  →  Super Admin (*)")
 	log.Println("   👤 admin      / Admin@123  →  Admin (org scope)")
@@ -198,7 +263,7 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 // ResetSequences resets PostgreSQL SERIAL sequences to the max ID found in each table.
 // This is necessary after seeding records with manual ID values.
 func ResetSequences(db *gorm.DB) {
-	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_audit_logs", "sys_auth_histories"}
+	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_auth_clients", "sys_audit_logs", "sys_auth_histories"}
 	for _, table := range tables {
 		db.Exec(fmt.Sprintf("SELECT setval(pg_get_serial_sequence('%s', 'id'), COALESCE((SELECT MAX(id) FROM %s), 1))", table, table))
 	}

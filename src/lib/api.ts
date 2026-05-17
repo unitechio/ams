@@ -239,6 +239,24 @@ export interface DeviceSession {
   last_active: string;
 }
 
+export interface AuthClient {
+  id: number;
+  client_id: string;
+  client_secret: string;
+  name: string;
+  description: string;
+  app_type: string;
+  public: boolean;
+  pkce_required: boolean;
+  active: boolean;
+  grant_types: string[];
+  redirect_uris: string[];
+  audiences: string[];
+  channels: string[];
+  trusted_types: string[];
+  created_at: string;
+}
+
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -305,6 +323,26 @@ export const devicesApi = {
     return get<PaginatedResponse<DeviceSession>>(`/devices?${q}`);
   },
   revoke: (id: string) => del<void>(`/devices/${id}`),
+};
+
+export const clientsApi = {
+  list: (params?: { search?: string; app_type?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.app_type) q.set('app_type', params.app_type);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.page_size) q.set('page_size', String(params.page_size));
+    return get<PaginatedResponse<AuthClient>>(`/auth-clients?${q}`);
+  },
+  create: (data: Omit<AuthClient, 'id' | 'created_at'>) => post<AuthClient>('/auth-clients', data),
+  update: (id: number, data: Omit<AuthClient, 'id' | 'created_at'>) => put<AuthClient>(`/auth-clients/${id}`, data),
+  delete: (id: number) => del<void>(`/auth-clients/${id}`),
+  token: (client_id: string, client_secret: string) =>
+    authRequest<{ access_token: string; token_type: string; expires_at: string; client_id: string; audiences: string[] }>('POST', '/auth/token', {
+      client_id,
+      client_secret,
+      grant_type: 'client_credentials',
+    }),
 };
 
 // ─── Users API ────────────────────────────────────────────────────────────────

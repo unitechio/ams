@@ -41,6 +41,25 @@ type User struct {
 	Roles             []*Role // loaded lazily
 }
 
+type AuthClient struct {
+	ID           uint
+	ClientID     string
+	ClientSecret string
+	Name         string
+	Description  string
+	AppType      string
+	Public       bool
+	PKCERequired bool
+	Active       bool
+	GrantTypes   []string
+	RedirectURIs []string
+	Audiences    []string
+	Channels     []string
+	TrustedTypes []string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
 // EffectivePermissions resolves all permissions from user's roles
 func (u *User) EffectivePermissions() *permission.PermissionSet {
 	var eps []permission.EffectivePermission
@@ -251,6 +270,13 @@ type TokenRepository interface {
 	ListActiveSessions(userID uint) ([]*RefreshToken, error)
 	ListSessions(filters map[string]interface{}) ([]*RefreshToken, int64, error)
 	FindTrustedDevice(userID uint, clientID, fingerprint string) (*RefreshToken, error)
+}
+
+type ClientRepository interface {
+	FindByClientID(clientID string) (*AuthClient, error)
+	List(filters map[string]interface{}) ([]*AuthClient, int64, error)
+	Save(client *AuthClient) error
+	Delete(id uint) error
 }
 
 // AuditRepository for audit logging

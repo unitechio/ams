@@ -16,7 +16,6 @@ import (
 	"github.com/owner/auth-server/internal/authorization/permission"
 	"github.com/owner/auth-server/internal/domain"
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
-	"github.com/owner/auth-server/internal/security/clientpolicy"
 	passwordsvc "github.com/owner/auth-server/internal/security/password"
 	"github.com/owner/auth-server/internal/security/ratelimit"
 	totpsvc "github.com/owner/auth-server/internal/security/totp"
@@ -77,6 +76,14 @@ type StepUpResponse struct {
 	ExpiresAt   time.Time `json:"expires_at"`
 }
 
+type ClientTokenResponse struct {
+	AccessToken string    `json:"access_token"`
+	TokenType   string    `json:"token_type"`
+	ExpiresAt   time.Time `json:"expires_at"`
+	ClientID    string    `json:"client_id"`
+	Audiences   []string  `json:"audiences"`
+}
+
 type DeviceListItem struct {
 	ID         string `json:"id"`
 	UserID     uint   `json:"user_id"`
@@ -110,17 +117,19 @@ type UserInfo struct {
 // ─── Auth Usecase ─────────────────────────────────────────────────────────────
 
 type AuthUsecase struct {
-	userRepo  domain.UserRepository
-	tokenRepo domain.TokenRepository
-	permRepo  domain.PermissionRepository
-	authRepo  domain.AuthHistoryRepository
-	jwt       *jwtpkg.Service
+	userRepo   domain.UserRepository
+	tokenRepo  domain.TokenRepository
+	clientRepo domain.ClientRepository
+	permRepo   domain.PermissionRepository
+	authRepo   domain.AuthHistoryRepository
+	jwt        *jwtpkg.Service
 }
 
 type sessionContext struct {
 	SessionID         string
 	TokenFamily       string
 	ClientID          string
+	Audiences         []string
 	DeviceName        string
 	DeviceFingerprint string
 	IPAddress         string
@@ -132,11 +141,12 @@ type sessionContext struct {
 func NewAuthUsecase(
 	userRepo domain.UserRepository,
 	tokenRepo domain.TokenRepository,
+	clientRepo domain.ClientRepository,
 	permRepo domain.PermissionRepository,
 	authRepo domain.AuthHistoryRepository,
 	jwt *jwtpkg.Service,
 ) *AuthUsecase {
-	return &AuthUsecase{userRepo, tokenRepo, permRepo, authRepo, jwt}
+	return &AuthUsecase{userRepo, tokenRepo, clientRepo, permRepo, authRepo, jwt}
 }
 
 func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
@@ -172,7 +182,7 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 		uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "locked", "Tài khoản đang bị khóa")
 		return nil, ErrAccountLocked
 	}
-	clientID, channel, deviceName, deviceFingerprint, err := validateClientAccess(user, req)
+	client, channel, deviceName, deviceFingerprint, err := uc.validateClientAccess(user, req)
 	if err != nil {
 		uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", err.Error())
 		return nil, err
@@ -198,7 +208,7 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 	}
 	trustedDevice := false
 	if deviceFingerprint != "" {
-		if _, err := uc.tokenRepo.FindTrustedDevice(user.ID, clientID, deviceFingerprint); err == nil {
+		if _, err := uc.tokenRepo.FindTrustedDevice(user.ID, client.ClientID, deviceFingerprint); err == nil {
 			trustedDevice = true
 		}
 	}
@@ -245,7 +255,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 	return uc.buildLoginResponse(user, sessionContext{
 		SessionID:         generateOpaqueID(16),
 		TokenFamily:       generateOpaqueID(16),
-		ClientID:          clientID,
+		ClientID:          client.ClientID,
+		Audiences:         cloneStrings(client.Audiences),
 		DeviceName:        fmt.Sprintf("%s [%s]", deviceName, channel),
 		DeviceFingerprint: deviceFingerprint,
 		IPAddress:         req.IPAddress,
@@ -286,10 +297,17 @@ func (uc *AuthUsecase) RefreshToken(refreshTokenStr string) (*LoginResponse, err
 	if err != nil {
 		return nil, ErrTokenRevoked
 	}
+	audiences := []string{}
+	if uc.clientRepo != nil && stored.ClientID != "" {
+		if client, clientErr := uc.clientRepo.FindByClientID(stored.ClientID); clientErr == nil {
+			audiences = cloneStrings(client.Audiences)
+		}
+	}
 	return uc.buildLoginResponse(user, sessionContext{
 		SessionID:         stored.SessionID,
 		TokenFamily:       stored.TokenFamily,
 		ClientID:          stored.ClientID,
+		Audiences:         audiences,
 		DeviceName:        stored.DeviceName,
 		DeviceFingerprint: stored.DeviceFingerprint,
 		IPAddress:         stored.IPAddress,
@@ -297,6 +315,36 @@ func (uc *AuthUsecase) RefreshToken(refreshTokenStr string) (*LoginResponse, err
 		Trusted:           stored.Trusted,
 		RotatedFrom:       stored.Token,
 	})
+}
+
+func (uc *AuthUsecase) IssueClientToken(clientID, clientSecret, grantType string) (*ClientTokenResponse, error) {
+	if uc.clientRepo == nil {
+		return nil, errors.New("client registry chưa sẵn sàng")
+	}
+	client, err := uc.clientRepo.FindByClientID(strings.TrimSpace(clientID))
+	if err != nil || !client.Active {
+		return nil, errors.New("client không tồn tại hoặc đã bị vô hiệu")
+	}
+	if strings.TrimSpace(grantType) != "client_credentials" {
+		return nil, errors.New("grant_type này chưa được hỗ trợ cho token machine-to-machine")
+	}
+	if !containsOrEmpty(client.GrantTypes, "client_credentials") {
+		return nil, errors.New("client không được phép dùng client_credentials")
+	}
+	if client.Public || strings.TrimSpace(clientSecret) != client.ClientSecret {
+		return nil, errors.New("client_secret không hợp lệ")
+	}
+	token, err := uc.jwt.GenerateAccessToken(0, client.ClientID, []string{"service"}, generateOpaqueID(12), client.ClientID, cloneStrings(client.Audiences))
+	if err != nil {
+		return nil, err
+	}
+	return &ClientTokenResponse{
+		AccessToken: token,
+		TokenType:   "Bearer",
+		ExpiresAt:   time.Now().Add(15 * time.Minute),
+		ClientID:    client.ClientID,
+		Audiences:   cloneStrings(client.Audiences),
+	}, nil
 }
 
 func (uc *AuthUsecase) Logout(userID uint, sessionID string) error {
@@ -375,7 +423,7 @@ func (uc *AuthUsecase) buildLoginResponse(user *domain.User, session sessionCont
 		passwordChangeReason = "password_expired"
 	}
 
-	accessToken, err := uc.jwt.GenerateAccessToken(user.ID, user.Username, roles, session.SessionID, session.ClientID)
+	accessToken, err := uc.jwt.GenerateAccessToken(user.ID, user.Username, roles, session.SessionID, session.ClientID, session.Audiences)
 	if err != nil {
 		return nil, err
 	}
@@ -911,6 +959,131 @@ func (uc *UserUsecase) ResetPassword(id uint, newPassword string, oneTimePasswor
 	return nil
 }
 
+type CreateClientReq struct {
+	ClientID     string   `json:"client_id" binding:"required"`
+	ClientSecret string   `json:"client_secret"`
+	Name         string   `json:"name" binding:"required"`
+	Description  string   `json:"description"`
+	AppType      string   `json:"app_type"`
+	Public       bool     `json:"public"`
+	PKCERequired bool     `json:"pkce_required"`
+	Active       bool     `json:"active"`
+	GrantTypes   []string `json:"grant_types"`
+	RedirectURIs []string `json:"redirect_uris"`
+	Audiences    []string `json:"audiences"`
+	Channels     []string `json:"channels"`
+	TrustedTypes []string `json:"trusted_types"`
+}
+
+type UpdateClientReq = CreateClientReq
+
+type ClientResponse struct {
+	ID           uint      `json:"id"`
+	ClientID     string    `json:"client_id"`
+	ClientSecret string    `json:"client_secret"`
+	Name         string    `json:"name"`
+	Description  string    `json:"description"`
+	AppType      string    `json:"app_type"`
+	Public       bool      `json:"public"`
+	PKCERequired bool      `json:"pkce_required"`
+	Active       bool      `json:"active"`
+	GrantTypes   []string  `json:"grant_types"`
+	RedirectURIs []string  `json:"redirect_uris"`
+	Audiences    []string  `json:"audiences"`
+	Channels     []string  `json:"channels"`
+	TrustedTypes []string  `json:"trusted_types"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type ClientUsecase struct {
+	repo domain.ClientRepository
+}
+
+func NewClientUsecase(repo domain.ClientRepository) *ClientUsecase {
+	return &ClientUsecase{repo: repo}
+}
+
+func (uc *ClientUsecase) List(filters map[string]interface{}, page, pageSize int) (*PaginatedResult[ClientResponse], error) {
+	filters["page"] = page
+	filters["page_size"] = pageSize
+	clients, total, err := uc.repo.List(filters)
+	if err != nil {
+		return nil, err
+	}
+	data := make([]ClientResponse, len(clients))
+	for i, client := range clients {
+		data[i] = clientToResponse(client)
+	}
+	return paginate(data, total, page, pageSize), nil
+}
+
+func (uc *ClientUsecase) Create(req *CreateClientReq) (*ClientResponse, error) {
+	client := &domain.AuthClient{
+		ClientID:     strings.TrimSpace(req.ClientID),
+		ClientSecret: strings.TrimSpace(req.ClientSecret),
+		Name:         strings.TrimSpace(req.Name),
+		Description:  strings.TrimSpace(req.Description),
+		AppType:      strings.TrimSpace(req.AppType),
+		Public:       req.Public,
+		PKCERequired: req.PKCERequired,
+		Active:       req.Active,
+		GrantTypes:   cleanStringList(req.GrantTypes),
+		RedirectURIs: cleanStringList(req.RedirectURIs),
+		Audiences:    cleanStringList(req.Audiences),
+		Channels:     cleanStringList(req.Channels),
+		TrustedTypes: cleanStringList(req.TrustedTypes),
+	}
+	normalizeClient(client)
+	if err := uc.repo.Save(client); err != nil {
+		return nil, err
+	}
+	resp := clientToResponse(client)
+	return &resp, nil
+}
+
+func (uc *ClientUsecase) Update(id uint, req *UpdateClientReq) (*ClientResponse, error) {
+	client, err := uc.findByID(id)
+	if err != nil {
+		return nil, err
+	}
+	client.ClientID = strings.TrimSpace(req.ClientID)
+	client.ClientSecret = strings.TrimSpace(req.ClientSecret)
+	client.Name = strings.TrimSpace(req.Name)
+	client.Description = strings.TrimSpace(req.Description)
+	client.AppType = strings.TrimSpace(req.AppType)
+	client.Public = req.Public
+	client.PKCERequired = req.PKCERequired
+	client.Active = req.Active
+	client.GrantTypes = cleanStringList(req.GrantTypes)
+	client.RedirectURIs = cleanStringList(req.RedirectURIs)
+	client.Audiences = cleanStringList(req.Audiences)
+	client.Channels = cleanStringList(req.Channels)
+	client.TrustedTypes = cleanStringList(req.TrustedTypes)
+	normalizeClient(client)
+	if err := uc.repo.Save(client); err != nil {
+		return nil, err
+	}
+	resp := clientToResponse(client)
+	return &resp, nil
+}
+
+func (uc *ClientUsecase) Delete(id uint) error {
+	return uc.repo.Delete(id)
+}
+
+func (uc *ClientUsecase) findByID(id uint) (*domain.AuthClient, error) {
+	clients, _, err := uc.repo.List(map[string]interface{}{"page": 1, "page_size": 500})
+	if err != nil {
+		return nil, err
+	}
+	for _, client := range clients {
+		if client.ID == id {
+			return client, nil
+		}
+	}
+	return nil, errors.New("client không tồn tại")
+}
+
 // ─── Role Usecase ─────────────────────────────────────────────────────────────
 
 type CreateRoleReq struct {
@@ -1320,6 +1493,65 @@ func generateOpaqueID(size int) string {
 	return hex.EncodeToString(buffer)
 }
 
+func cloneStrings(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	return append([]string{}, values...)
+}
+
+func cleanStringList(values []string) []string {
+	result := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" || seen[strings.ToLower(trimmed)] {
+			continue
+		}
+		seen[strings.ToLower(trimmed)] = true
+		result = append(result, trimmed)
+	}
+	return result
+}
+
+func normalizeClient(client *domain.AuthClient) {
+	if client.AppType == "" {
+		client.AppType = "web_app"
+	}
+	if len(client.GrantTypes) == 0 {
+		client.GrantTypes = []string{"password", "refresh_token"}
+	}
+	if len(client.Channels) == 0 {
+		client.Channels = []string{"web"}
+	}
+	if len(client.Audiences) == 0 {
+		client.Audiences = []string{"default-api"}
+	}
+	if !client.Public && client.ClientSecret == "" {
+		client.ClientSecret = generateOpaqueID(16)
+	}
+}
+
+func clientToResponse(client *domain.AuthClient) ClientResponse {
+	return ClientResponse{
+		ID:           client.ID,
+		ClientID:     client.ClientID,
+		ClientSecret: client.ClientSecret,
+		Name:         client.Name,
+		Description:  client.Description,
+		AppType:      client.AppType,
+		Public:       client.Public,
+		PKCERequired: client.PKCERequired,
+		Active:       client.Active,
+		GrantTypes:   cloneStrings(client.GrantTypes),
+		RedirectURIs: cloneStrings(client.RedirectURIs),
+		Audiences:    cloneStrings(client.Audiences),
+		Channels:     cloneStrings(client.Channels),
+		TrustedTypes: cloneStrings(client.TrustedTypes),
+		CreatedAt:    client.CreatedAt,
+	}
+}
+
 func generateNumericCode() string {
 	return fmt.Sprintf("%06d", time.Now().UnixNano()%1000000)
 }
@@ -1365,37 +1597,40 @@ func containsOrEmpty(haystack []string, needle string) bool {
 	return false
 }
 
-func validateClientAccess(user *domain.User, req *LoginRequest) (string, string, string, string, error) {
+func (uc *AuthUsecase) validateClientAccess(user *domain.User, req *LoginRequest) (*domain.AuthClient, string, string, string, error) {
 	clientID := strings.TrimSpace(req.ClientID)
 	if clientID == "" {
 		clientID = "web_portal"
 	}
-	client, ok := clientpolicy.Get(clientID)
-	if !ok {
-		return "", "", "", "", errors.New("client_id không hợp lệ hoặc chưa được đăng ký")
+	if uc.clientRepo == nil {
+		return nil, "", "", "", errors.New("client registry chưa sẵn sàng")
+	}
+	client, err := uc.clientRepo.FindByClientID(clientID)
+	if err != nil || !client.Active {
+		return nil, "", "", "", errors.New("client_id không hợp lệ hoặc chưa được đăng ký")
 	}
 	grantType := strings.TrimSpace(req.GrantType)
 	if grantType == "" {
 		grantType = "password"
 	}
 	if !containsOrEmpty(client.GrantTypes, grantType) {
-		return "", "", "", "", errors.New("grant_type không được hỗ trợ cho client này")
+		return nil, "", "", "", errors.New("grant_type không được hỗ trợ cho client này")
 	}
-	if !client.Public && strings.TrimSpace(req.ClientSecret) != client.Secret {
-		return "", "", "", "", errors.New("client_secret không hợp lệ")
+	if !client.Public && strings.TrimSpace(req.ClientSecret) != client.ClientSecret {
+		return nil, "", "", "", errors.New("client_secret không hợp lệ")
 	}
 	channel := strings.TrimSpace(req.Channel)
 	if channel == "" && len(client.Channels) > 0 {
 		channel = client.Channels[0]
 	}
 	if !containsOrEmpty(client.Channels, channel) {
-		return "", "", "", "", errors.New("channel không hợp lệ cho client này")
+		return nil, "", "", "", errors.New("channel không hợp lệ cho client này")
 	}
 	if !containsOrEmpty(user.AllowedClients, clientID) {
-		return "", "", "", "", errors.New("tài khoản này không được phép đăng nhập vào client hiện tại")
+		return nil, "", "", "", errors.New("tài khoản này không được phép đăng nhập vào client hiện tại")
 	}
 	if !containsOrEmpty(user.AllowedChannels, channel) {
-		return "", "", "", "", errors.New("tài khoản này không được phép đăng nhập qua kênh hiện tại")
+		return nil, "", "", "", errors.New("tài khoản này không được phép đăng nhập qua kênh hiện tại")
 	}
 	deviceName := strings.TrimSpace(req.DeviceName)
 	if deviceName == "" {
@@ -1405,7 +1640,7 @@ func validateClientAccess(user *domain.User, req *LoginRequest) (string, string,
 	if deviceFingerprint == "" {
 		deviceFingerprint = fmt.Sprintf("%s|%s|%s", clientID, req.IPAddress, req.UserAgent)
 	}
-	return clientID, channel, deviceName, deviceFingerprint, nil
+	return client, channel, deviceName, deviceFingerprint, nil
 }
 
 // ─── Log Usecase ─────────────────────────────────────────────────────────────

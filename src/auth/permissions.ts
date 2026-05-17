@@ -52,6 +52,16 @@ export const PERMISSIONS = {
   DEVICE_READ: 'device.read' as const,
   DEVICE_REVOKE: 'device.revoke' as const,
 
+  CLIENT_READ: 'client.read' as const,
+  CLIENT_CREATE: 'client.create' as const,
+  CLIENT_UPDATE: 'client.update' as const,
+  CLIENT_DELETE: 'client.delete' as const,
+
+  SERVICE_READ: 'service.read' as const,
+  SERVICE_CREATE: 'service.create' as const,
+  SERVICE_UPDATE: 'service.update' as const,
+  SERVICE_DELETE: 'service.delete' as const,
+
   // ── Wildcard (Super Admin bypass)
   WILDCARD: '*' as const,
 } as const;
@@ -108,6 +118,14 @@ export const PERMISSION_GROUPS: { name: string; label: string; permissions: Perm
     name: 'device', label: 'Thiết bị',
     permissions: [PERMISSIONS.DEVICE_READ, PERMISSIONS.DEVICE_REVOKE],
   },
+  {
+    name: 'client', label: 'OAuth Client',
+    permissions: [PERMISSIONS.CLIENT_READ, PERMISSIONS.CLIENT_CREATE, PERMISSIONS.CLIENT_UPDATE, PERMISSIONS.CLIENT_DELETE],
+  },
+  {
+    name: 'service', label: 'Service Account',
+    permissions: [PERMISSIONS.SERVICE_READ, PERMISSIONS.SERVICE_CREATE, PERMISSIONS.SERVICE_UPDATE, PERMISSIONS.SERVICE_DELETE],
+  },
 ];
 
 // Permission display names
@@ -139,5 +157,13 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'auth.read':          'Xem lịch sử login',
   'device.read':        'Xem thiết bị đăng nhập',
   'device.revoke':      'Thu hồi thiết bị đăng nhập',
+  'client.read':        'Xem auth clients',
+  'client.create':      'Tạo auth client',
+  'client.update':      'Sửa auth client',
+  'client.delete':      'Xóa auth client',
+  'service.read':       'Xem service account',
+  'service.create':     'Tạo service account',
+  'service.update':     'Sửa service account',
+  'service.delete':     'Xóa service account',
   '*':                  'Toàn quyền (Super Admin)',
 };

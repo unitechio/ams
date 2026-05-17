@@ -173,6 +173,73 @@ func (r *testTokenRepo) FindTrustedDevice(userID uint, clientID, fingerprint str
 
 type testAuthHistoryRepo struct{ items []*domain.AuthHistory }
 
+type testClientRepo struct {
+	clients map[string]*domain.AuthClient
+}
+
+func newTestClientRepo() *testClientRepo {
+	return &testClientRepo{clients: map[string]*domain.AuthClient{
+		"web_portal": {
+			ID:         1,
+			ClientID:   "web_portal",
+			Name:       "Web Portal",
+			Active:     true,
+			Public:     true,
+			GrantTypes: []string{"password", "refresh_token"},
+			Channels:   []string{"web"},
+			Audiences:  []string{"web-api"},
+		},
+		"payment_service": {
+			ID:           2,
+			ClientID:     "payment_service",
+			ClientSecret: "payment_service_secret",
+			Name:         "Payment Service",
+			Active:       true,
+			Public:       false,
+			GrantTypes:   []string{"client_credentials"},
+			Channels:     []string{"service"},
+			Audiences:    []string{"payment-api"},
+		},
+	}}
+}
+
+func (r *testClientRepo) FindByClientID(clientID string) (*domain.AuthClient, error) {
+	client, ok := r.clients[clientID]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	cloned := *client
+	return &cloned, nil
+}
+
+func (r *testClientRepo) List(filters map[string]interface{}) ([]*domain.AuthClient, int64, error) {
+	result := make([]*domain.AuthClient, 0, len(r.clients))
+	for _, client := range r.clients {
+		cloned := *client
+		result = append(result, &cloned)
+	}
+	return result, int64(len(result)), nil
+}
+
+func (r *testClientRepo) Save(client *domain.AuthClient) error {
+	if client.ID == 0 {
+		client.ID = uint(len(r.clients) + 1)
+	}
+	cloned := *client
+	r.clients[client.ClientID] = &cloned
+	return nil
+}
+
+func (r *testClientRepo) Delete(id uint) error {
+	for key, client := range r.clients {
+		if client.ID == id {
+			delete(r.clients, key)
+			return nil
+		}
+	}
+	return nil
+}
+
 func (r *testAuthHistoryRepo) Save(h *domain.AuthHistory) error {
 	r.items = append(r.items, h)
 	return nil
@@ -225,7 +292,7 @@ func TestChangePasswordClearsOneTimePasswordAndPreventsReuse(t *testing.T) {
 		Status:          "active",
 	})
 	tokenRepo := &testTokenRepo{}
-	authUC := NewAuthUsecase(userRepo, tokenRepo, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, tokenRepo, newTestClientRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	if err := authUC.ChangePassword(7, "TempPass@123", "TempPass@123"); err == nil {
 		t.Fatalf("expected password reuse to be rejected")
@@ -281,7 +348,7 @@ func TestLoginResponseMarksExpiredPassword(t *testing.T) {
 	})
 	tokenRepo := &testTokenRepo{}
 	authHistoryRepo := &testAuthHistoryRepo{}
-	authUC := NewAuthUsecase(userRepo, tokenRepo, nil, authHistoryRepo, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, tokenRepo, newTestClientRepo(), nil, authHistoryRepo, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	resp, err := authUC.Login(&LoginRequest{
 		Username:  "expired.user",
@@ -310,7 +377,7 @@ func TestLoginUpgradesLegacyBcryptHashToArgon2(t *testing.T) {
 		PasswordHistory: []string{legacyHash},
 		Status:          "active",
 	})
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	if _, err := authUC.Login(&LoginRequest{
 		Username:  "legacy.user",
@@ -341,7 +408,7 @@ func TestLoginRequiresEmailOTPForUntrustedDevice(t *testing.T) {
 		Email:           "otp@example.com",
 		PasswordHistory: []string{passwordHash},
 	})
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	_, err := authUC.Login(&LoginRequest{
 		Username:          "otp.user",
@@ -373,7 +440,7 @@ func TestStepUpAcceptsPersistedEmailOTP(t *testing.T) {
 		EmailOTPExpiresAt: &expiry,
 		Status:            "active",
 	})
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	resp, err := authUC.StepUp(32, "session-1", "web_portal", "StepUpPass@123", "123456")
 	if err != nil {
@@ -389,7 +456,7 @@ func TestStepUpAcceptsPersistedEmailOTP(t *testing.T) {
 
 func TestLoginRateLimitBlocksRepeatedFailures(t *testing.T) {
 	userRepo := newtestUserRepo()
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 	identityKey := ratelimit.Normalize("login_identity", "127.0.0.1", "rate.user")
 	ipKey := ratelimit.Normalize("login_ip", "127.0.0.1")
 	loginIdentityLimiter.Reset(identityKey)

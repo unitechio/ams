@@ -129,6 +129,27 @@ type GormRefreshToken struct {
 
 func (GormRefreshToken) TableName() string { return "sys_refresh_tokens" }
 
+type GormAuthClient struct {
+	ID               uint   `gorm:"primaryKey;autoIncrement"`
+	ClientID         string `gorm:"uniqueIndex;size:150;not null"`
+	ClientSecret     string `gorm:"size:255;default:''"`
+	Name             string `gorm:"size:200;not null"`
+	Description      string `gorm:"size:500;default:''"`
+	AppType          string `gorm:"size:50;not null;default:'web_app'"`
+	Public           bool   `gorm:"default:true"`
+	PKCERequired     bool   `gorm:"default:false"`
+	Active           bool   `gorm:"default:true"`
+	GrantTypesJSON   string `gorm:"type:text;default:'[]'"`
+	RedirectURIsJSON string `gorm:"type:text;default:'[]'"`
+	AudiencesJSON    string `gorm:"type:text;default:'[]'"`
+	ChannelsJSON     string `gorm:"type:text;default:'[]'"`
+	TrustedTypesJSON string `gorm:"type:text;default:'[]'"`
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+func (GormAuthClient) TableName() string { return "sys_auth_clients" }
+
 type GormAuditLog struct {
 	ID         uint   `gorm:"primaryKey;autoIncrement"`
 	UserID     uint   `gorm:"index"`

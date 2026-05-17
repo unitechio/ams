@@ -87,6 +87,24 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 	ok(c, resp)
 }
 
+func (h *AuthHandler) Token(c *gin.Context) {
+	var body struct {
+		ClientID     string `json:"client_id" binding:"required"`
+		ClientSecret string `json:"client_secret" binding:"required"`
+		GrantType    string `json:"grant_type" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	resp, err := h.uc.IssueClientToken(body.ClientID, body.ClientSecret, body.GrantType)
+	if err != nil {
+		fail(c, http.StatusUnauthorized, err.Error())
+		return
+	}
+	ok(c, resp)
+}
+
 func (h *AuthHandler) SSOProviders(c *gin.Context) {
 	ok(c, sso.List())
 }
@@ -393,6 +411,68 @@ func (h *UserHandler) ResetPassword(c *gin.Context) {
 		return
 	}
 	ok(c, gin.H{"message": "Đặt lại mật khẩu thành công"})
+}
+
+type ClientHandler struct{ uc *usecase.ClientUsecase }
+
+func NewClientHandler(uc *usecase.ClientUsecase) *ClientHandler { return &ClientHandler{uc} }
+
+func (h *ClientHandler) List(c *gin.Context) {
+	page, pageSize := pagingParams(c)
+	filters := map[string]interface{}{
+		"search":   c.Query("search"),
+		"app_type": c.Query("app_type"),
+	}
+	result, err := h.uc.List(filters, page, pageSize)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ok(c, result)
+}
+
+func (h *ClientHandler) Create(c *gin.Context) {
+	var req usecase.CreateClientReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	result, err := h.uc.Create(&req)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	created(c, result)
+}
+
+func (h *ClientHandler) Update(c *gin.Context) {
+	id, valid := parseID(c)
+	if !valid {
+		return
+	}
+	var req usecase.UpdateClientReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	result, err := h.uc.Update(id, &req)
+	if err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	ok(c, result)
+}
+
+func (h *ClientHandler) Delete(c *gin.Context) {
+	id, valid := parseID(c)
+	if !valid {
+		return
+	}
+	if err := h.uc.Delete(id); err != nil {
+		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ok(c, gin.H{"message": "Đã xóa auth client"})
 }
 
 // ─── Role Handler ─────────────────────────────────────────────────────────────
