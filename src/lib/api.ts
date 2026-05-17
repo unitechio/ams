@@ -197,8 +197,17 @@ export const authApi = {
   // don't accidentally trigger the session-expired logout handler.
   login: (username: string, password: string) =>
     authRequest<LoginResponse>('POST', '/auth/login', { username, password }),
-  logout: () =>
-    post<void>('/auth/logout', {}),
+  logout: async () => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (_accessToken) headers['Authorization'] = `Bearer ${_accessToken}`;
+    const res = await fetch(`${BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({}),
+    });
+    const json = await res.json().catch(() => ({ success: false }));
+    if (!res.ok && res.status !== 401) throw new Error(json.error || 'Lỗi đăng xuất');
+  },
   me: () =>
     get<UserInfo>('/auth/me'),
   refresh: (refreshToken: string) =>

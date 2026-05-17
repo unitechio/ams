@@ -23,13 +23,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [passwordChangeReason, setPasswordChangeReason] = useState<'one_time_password' | 'password_expired' | null>(null);
 
   const logout = useCallback(() => {
-    authApi.logout().catch(() => { });
     setToken(null);
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('access_token');
     setUser(null);
+    setMustChangePassword(false);
+    setPasswordChangeReason(null);
     clearPermissionService();
-    window.location.href = '/login';
+    authApi.logout().catch(() => { });
   }, []);
 
   // On mount: restore session
