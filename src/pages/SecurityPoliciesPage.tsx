@@ -29,6 +29,14 @@ const DEFAULT_FORM = {
     allow_sso: true,
     trusted_device_ttl_hours: 720,
     session_ttl_minutes: 1440,
+    refresh_ttl_minutes: 10080,
+    step_up_ttl_minutes: 10,
+    login_ip_max_attempts: 20,
+    login_ip_window_minutes: 5,
+    login_ip_block_minutes: 15,
+    login_identity_max_attempts: 7,
+    login_identity_window_minutes: 10,
+    login_identity_block_minutes: 30,
     password_min_length: 8,
     require_upper: true,
     require_lower: true,
@@ -108,6 +116,14 @@ export default function SecurityPoliciesPage() {
         allow_sso: policy.config.allow_sso ?? true,
         trusted_device_ttl_hours: policy.config.trusted_device_ttl_hours ?? 720,
         session_ttl_minutes: policy.config.session_ttl_minutes ?? 1440,
+        refresh_ttl_minutes: policy.config.refresh_ttl_minutes ?? 10080,
+        step_up_ttl_minutes: policy.config.step_up_ttl_minutes ?? 10,
+        login_ip_max_attempts: policy.config.login_ip_max_attempts ?? 20,
+        login_ip_window_minutes: policy.config.login_ip_window_minutes ?? 5,
+        login_ip_block_minutes: policy.config.login_ip_block_minutes ?? 15,
+        login_identity_max_attempts: policy.config.login_identity_max_attempts ?? 7,
+        login_identity_window_minutes: policy.config.login_identity_window_minutes ?? 10,
+        login_identity_block_minutes: policy.config.login_identity_block_minutes ?? 30,
         password_min_length: policy.config.password_min_length ?? 8,
         require_upper: policy.config.require_upper ?? true,
         require_lower: policy.config.require_lower ?? true,
@@ -236,6 +252,14 @@ export default function SecurityPoliciesPage() {
                 <div className="rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-500">Policy auth sẽ override runtime cho MFA, password login, SSO login, trusted device TTL và session TTL.</div>
                 <div><Label>Trusted Device TTL (hours)</Label><Input type="number" value={form.config.trusted_device_ttl_hours} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, trusted_device_ttl_hours: Number(e.target.value || 0) } }))} /></div>
                 <div><Label>Session TTL (minutes)</Label><Input type="number" value={form.config.session_ttl_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, session_ttl_minutes: Number(e.target.value || 0) } }))} /></div>
+                <div><Label>Refresh TTL (minutes)</Label><Input type="number" value={form.config.refresh_ttl_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, refresh_ttl_minutes: Number(e.target.value || 0) } }))} /></div>
+                <div><Label>Step-up TTL (minutes)</Label><Input type="number" value={form.config.step_up_ttl_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, step_up_ttl_minutes: Number(e.target.value || 0) } }))} /></div>
+                <div><Label>IP Max Attempts</Label><Input type="number" value={form.config.login_ip_max_attempts} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_ip_max_attempts: Number(e.target.value || 0) } }))} /></div>
+                <div><Label>IP Window (minutes)</Label><Input type="number" value={form.config.login_ip_window_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_ip_window_minutes: Number(e.target.value || 0) } }))} /></div>
+                <div><Label>IP Block (minutes)</Label><Input type="number" value={form.config.login_ip_block_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_ip_block_minutes: Number(e.target.value || 0) } }))} /></div>
+                <div><Label>Identity Max Attempts</Label><Input type="number" value={form.config.login_identity_max_attempts} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_identity_max_attempts: Number(e.target.value || 0) } }))} /></div>
+                <div><Label>Identity Window (minutes)</Label><Input type="number" value={form.config.login_identity_window_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_identity_window_minutes: Number(e.target.value || 0) } }))} /></div>
+                <div><Label>Identity Block (minutes)</Label><Input type="number" value={form.config.login_identity_block_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_identity_block_minutes: Number(e.target.value || 0) } }))} /></div>
               </>
             ) : (
               <>
@@ -313,7 +337,7 @@ export default function SecurityPoliciesPage() {
                         {policy.policy_type === 'auth' ? (
                           <>
                             <div>{policy.config.require_mfa ? 'Require MFA' : 'MFA inherit/default'}</div>
-                            <div className="text-slate-400">Pwd: {String(policy.config.allow_password ?? true)} • SSO: {String(policy.config.allow_sso ?? true)}</div>
+                            <div className="text-slate-400">Pwd: {String(policy.config.allow_password ?? true)} • SSO: {String(policy.config.allow_sso ?? true)} • Refresh: {policy.config.refresh_ttl_minutes ?? 10080}m</div>
                           </>
                         ) : (
                           <>

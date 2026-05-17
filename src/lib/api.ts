@@ -348,6 +348,14 @@ export interface SecurityPolicy {
     allow_sso?: boolean;
     trusted_device_ttl_hours?: number;
     session_ttl_minutes?: number;
+    refresh_ttl_minutes?: number;
+    step_up_ttl_minutes?: number;
+    login_ip_max_attempts?: number;
+    login_ip_window_minutes?: number;
+    login_ip_block_minutes?: number;
+    login_identity_max_attempts?: number;
+    login_identity_window_minutes?: number;
+    login_identity_block_minutes?: number;
     password_min_length?: number;
     require_upper?: boolean;
     require_lower?: boolean;

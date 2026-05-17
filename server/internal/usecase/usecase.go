@@ -41,6 +41,10 @@ var (
 	}{m: make(map[string]authorizationCode)}
 	loginIPLimiter       = ratelimit.New(20, 5*time.Minute, 15*time.Minute)
 	loginIdentityLimiter = ratelimit.New(7, 10*time.Minute, 30*time.Minute)
+	policyRateLimiters   = struct {
+		sync.Mutex
+		m map[string]*ratelimit.Limiter
+	}{m: make(map[string]*ratelimit.Limiter)}
 )
 
 const maxFailedLogins = 5
@@ -186,6 +190,7 @@ type sessionContext struct {
 	RotatedFrom       string
 	SessionTTLMinutes int
 	TrustedDeviceTTL  int
+	RefreshTTLMinutes int
 }
 
 type securityPolicyConfig struct {
@@ -194,6 +199,14 @@ type securityPolicyConfig struct {
 	AllowSSO              *bool `json:"allow_sso,omitempty"`
 	TrustedDeviceTTLHours *int  `json:"trusted_device_ttl_hours,omitempty"`
 	SessionTTLMinutes     *int  `json:"session_ttl_minutes,omitempty"`
+	RefreshTTLMinutes     *int  `json:"refresh_ttl_minutes,omitempty"`
+	StepUpTTLMinutes      *int  `json:"step_up_ttl_minutes,omitempty"`
+	LoginIPMaxAttempts    *int  `json:"login_ip_max_attempts,omitempty"`
+	LoginIPWindowMinutes  *int  `json:"login_ip_window_minutes,omitempty"`
+	LoginIPBlockMinutes   *int  `json:"login_ip_block_minutes,omitempty"`
+	LoginIDMaxAttempts    *int  `json:"login_identity_max_attempts,omitempty"`
+	LoginIDWindowMinutes  *int  `json:"login_identity_window_minutes,omitempty"`
+	LoginIDBlockMinutes   *int  `json:"login_identity_block_minutes,omitempty"`
 	PasswordMinLength     *int  `json:"password_min_length,omitempty"`
 	RequireUpper          *bool `json:"require_upper,omitempty"`
 	RequireLower          *bool `json:"require_lower,omitempty"`
@@ -244,18 +257,20 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 	now := time.Now()
 	ipKey := ratelimit.Normalize("login_ip", req.IPAddress)
 	identityKey := ratelimit.Normalize("login_identity", req.IPAddress, req.Username)
-	if err := loginIPLimiter.Allow(ipKey, now); err != nil {
+	preLoginPolicy := uc.resolvePolicy("auth", strings.TrimSpace(req.ClientID), strings.TrimSpace(req.Channel))
+	ipLimiter, identityLimiter := getLoginLimiters(preLoginPolicy)
+	if err := ipLimiter.Allow(ipKey, now); err != nil {
 		uc.recordLoginHistory(0, req.Username, req.IPAddress, req.UserAgent, "blocked", "Rate limit theo IP")
 		return nil, errors.New("quá nhiều lần đăng nhập từ IP này, vui lòng thử lại sau")
 	}
-	if err := loginIdentityLimiter.Allow(identityKey, now); err != nil {
+	if err := identityLimiter.Allow(identityKey, now); err != nil {
 		uc.recordLoginHistory(0, req.Username, req.IPAddress, req.UserAgent, "blocked", "Rate limit theo tài khoản/IP")
 		return nil, errors.New("đăng nhập bị giới hạn tạm thời do quá nhiều lần thất bại")
 	}
 	user, err := uc.userRepo.FindByUsername(req.Username)
 	if err != nil {
-		loginIPLimiter.RegisterFailure(ipKey, now)
-		loginIdentityLimiter.RegisterFailure(identityKey, now)
+		ipLimiter.RegisterFailure(ipKey, now)
+		identityLimiter.RegisterFailure(identityKey, now)
 		uc.recordLoginHistory(0, req.Username, req.IPAddress, req.UserAgent, "failed", "Người dùng không tồn tại")
 		return nil, ErrInvalidCredentials
 	}
@@ -280,8 +295,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 	}
 	passwordOK, needsRehash, err := passwordsvc.Verify(user.PasswordHash, req.Password)
 	if err != nil || !passwordOK {
-		loginIPLimiter.RegisterFailure(ipKey, now)
-		loginIdentityLimiter.RegisterFailure(identityKey, now)
+		ipLimiter.RegisterFailure(ipKey, now)
+		identityLimiter.RegisterFailure(identityKey, now)
 		failed := user.FailedLogins + 1
 		var lockUntil *time.Time
 		note := "Sai mật khẩu"
@@ -314,8 +329,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 			return nil, ErrOTPRequired
 		}
 		if !totpsvc.ValidateCode(user.TOTPSecret, strings.TrimSpace(req.OTPCode), time.Now()) {
-			loginIPLimiter.RegisterFailure(ipKey, now)
-			loginIdentityLimiter.RegisterFailure(identityKey, now)
+			ipLimiter.RegisterFailure(ipKey, now)
+			identityLimiter.RegisterFailure(identityKey, now)
 			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Mã TOTP không hợp lệ")
 			return nil, errors.New("mã OTP không hợp lệ")
 		}
@@ -328,8 +343,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 			return nil, ErrOTPRequired
 		}
 		if !verifyOneTimeCode(user.EmailOTPHash, user.EmailOTPExpiresAt, strings.TrimSpace(req.OTPCode)) {
-			loginIPLimiter.RegisterFailure(ipKey, now)
-			loginIdentityLimiter.RegisterFailure(identityKey, now)
+			ipLimiter.RegisterFailure(ipKey, now)
+			identityLimiter.RegisterFailure(identityKey, now)
 			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Email OTP không hợp lệ")
 			return nil, errors.New("mã OTP không hợp lệ")
 		}
@@ -337,8 +352,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 		user.EmailOTPExpiresAt = nil
 		_ = uc.userRepo.Save(user)
 	}
-	loginIPLimiter.Reset(ipKey)
-	loginIdentityLimiter.Reset(identityKey)
+	ipLimiter.Reset(ipKey)
+	identityLimiter.Reset(identityKey)
 	if needsRehash {
 		if rehashed, hashErr := passwordsvc.Hash(req.Password); hashErr == nil {
 			user.PasswordHash = rehashed
@@ -360,6 +375,7 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 		Trusted:           trustedDevice || req.TrustDevice,
 		SessionTTLMinutes: policyInt(loginPolicy, "session"),
 		TrustedDeviceTTL:  policyInt(loginPolicy, "trusted"),
+		RefreshTTLMinutes: policyInt(loginPolicy, "refresh"),
 	})
 }
 
@@ -396,6 +412,7 @@ func (uc *AuthUsecase) RefreshToken(refreshTokenStr string) (*LoginResponse, err
 		return nil, ErrTokenRevoked
 	}
 	audiences := []string{}
+	refreshPolicy := uc.resolvePolicy("auth", stored.ClientID, "")
 	if uc.clientRepo != nil && stored.ClientID != "" {
 		if client, clientErr := uc.clientRepo.FindByClientID(stored.ClientID); clientErr == nil {
 			audiences = cloneStrings(client.Audiences)
@@ -412,6 +429,9 @@ func (uc *AuthUsecase) RefreshToken(refreshTokenStr string) (*LoginResponse, err
 		UserAgent:         stored.UserAgent,
 		Trusted:           stored.Trusted,
 		RotatedFrom:       stored.Token,
+		SessionTTLMinutes: policyInt(refreshPolicy, "session"),
+		TrustedDeviceTTL:  policyInt(refreshPolicy, "trusted"),
+		RefreshTTLMinutes: policyInt(refreshPolicy, "refresh"),
 	})
 }
 
@@ -651,6 +671,7 @@ func (uc *AuthUsecase) CompleteSSO(providerID, code, state string, req *Complete
 		Trusted:           trustedDevice || req.TrustDevice,
 		SessionTTLMinutes: policyInt(loginPolicy, "session"),
 		TrustedDeviceTTL:  policyInt(loginPolicy, "trusted"),
+		RefreshTTLMinutes: policyInt(loginPolicy, "refresh"),
 	})
 }
 
@@ -737,6 +758,12 @@ func (uc *AuthUsecase) buildLoginResponse(user *domain.User, session sessionCont
 	refreshStr, expiry, err := uc.jwt.GenerateRefreshToken(user.ID, user.Username, session.SessionID, session.ClientID)
 	if err != nil {
 		return nil, err
+	}
+	if session.RefreshTTLMinutes > 0 {
+		customRefreshExpiry := time.Now().Add(time.Duration(session.RefreshTTLMinutes) * time.Minute)
+		if customRefreshExpiry.Before(expiry) {
+			expiry = customRefreshExpiry
+		}
 	}
 	if session.SessionTTLMinutes > 0 {
 		customExpiry := time.Now().Add(time.Duration(session.SessionTTLMinutes) * time.Minute)
@@ -954,7 +981,11 @@ func (uc *AuthUsecase) StepUp(userID uint, sessionID, clientID, password, otpCod
 			return nil, err
 		}
 	}
-	token, expiresAt, err := uc.jwt.GenerateStepUpToken(user.ID, user.Username, sessionID, clientID, 10*time.Minute)
+	stepUpTTL := 10 * time.Minute
+	if authPolicy := uc.resolvePolicy("auth", clientID, ""); authPolicy != nil && authPolicy.StepUpTTLMinutes != nil && *authPolicy.StepUpTTLMinutes > 0 {
+		stepUpTTL = time.Duration(*authPolicy.StepUpTTLMinutes) * time.Minute
+	}
+	token, expiresAt, err := uc.jwt.GenerateStepUpToken(user.ID, user.Username, sessionID, clientID, stepUpTTL)
 	if err != nil {
 		return nil, err
 	}
@@ -1713,6 +1744,14 @@ type SecurityPolicyRulePayload struct {
 	AllowSSO              *bool `json:"allow_sso,omitempty"`
 	TrustedDeviceTTLHours *int  `json:"trusted_device_ttl_hours,omitempty"`
 	SessionTTLMinutes     *int  `json:"session_ttl_minutes,omitempty"`
+	RefreshTTLMinutes     *int  `json:"refresh_ttl_minutes,omitempty"`
+	StepUpTTLMinutes      *int  `json:"step_up_ttl_minutes,omitempty"`
+	LoginIPMaxAttempts    *int  `json:"login_ip_max_attempts,omitempty"`
+	LoginIPWindowMinutes  *int  `json:"login_ip_window_minutes,omitempty"`
+	LoginIPBlockMinutes   *int  `json:"login_ip_block_minutes,omitempty"`
+	LoginIDMaxAttempts    *int  `json:"login_identity_max_attempts,omitempty"`
+	LoginIDWindowMinutes  *int  `json:"login_identity_window_minutes,omitempty"`
+	LoginIDBlockMinutes   *int  `json:"login_identity_block_minutes,omitempty"`
 	PasswordMinLength     *int  `json:"password_min_length,omitempty"`
 	RequireUpper          *bool `json:"require_upper,omitempty"`
 	RequireLower          *bool `json:"require_lower,omitempty"`
@@ -2371,6 +2410,30 @@ func mergeSecurityPolicyConfig(base, next *securityPolicyConfig) {
 	if next.SessionTTLMinutes != nil {
 		base.SessionTTLMinutes = next.SessionTTLMinutes
 	}
+	if next.RefreshTTLMinutes != nil {
+		base.RefreshTTLMinutes = next.RefreshTTLMinutes
+	}
+	if next.StepUpTTLMinutes != nil {
+		base.StepUpTTLMinutes = next.StepUpTTLMinutes
+	}
+	if next.LoginIPMaxAttempts != nil {
+		base.LoginIPMaxAttempts = next.LoginIPMaxAttempts
+	}
+	if next.LoginIPWindowMinutes != nil {
+		base.LoginIPWindowMinutes = next.LoginIPWindowMinutes
+	}
+	if next.LoginIPBlockMinutes != nil {
+		base.LoginIPBlockMinutes = next.LoginIPBlockMinutes
+	}
+	if next.LoginIDMaxAttempts != nil {
+		base.LoginIDMaxAttempts = next.LoginIDMaxAttempts
+	}
+	if next.LoginIDWindowMinutes != nil {
+		base.LoginIDWindowMinutes = next.LoginIDWindowMinutes
+	}
+	if next.LoginIDBlockMinutes != nil {
+		base.LoginIDBlockMinutes = next.LoginIDBlockMinutes
+	}
 	if next.PasswordMinLength != nil {
 		base.PasswordMinLength = next.PasswordMinLength
 	}
@@ -2401,8 +2464,44 @@ func policyInt(cfg *securityPolicyConfig, kind string) int {
 		if cfg.TrustedDeviceTTLHours != nil {
 			return *cfg.TrustedDeviceTTLHours
 		}
+	case "refresh":
+		if cfg.RefreshTTLMinutes != nil {
+			return *cfg.RefreshTTLMinutes
+		}
 	}
 	return 0
+}
+
+func getLoginLimiters(cfg *securityPolicyConfig) (*ratelimit.Limiter, *ratelimit.Limiter) {
+	if cfg == nil {
+		return loginIPLimiter, loginIdentityLimiter
+	}
+	ipMax := getOrDefaultInt(cfg.LoginIPMaxAttempts, 20)
+	ipWindow := getOrDefaultInt(cfg.LoginIPWindowMinutes, 5)
+	ipBlock := getOrDefaultInt(cfg.LoginIPBlockMinutes, 15)
+	idMax := getOrDefaultInt(cfg.LoginIDMaxAttempts, 7)
+	idWindow := getOrDefaultInt(cfg.LoginIDWindowMinutes, 10)
+	idBlock := getOrDefaultInt(cfg.LoginIDBlockMinutes, 30)
+	return getPolicyLimiter(fmt.Sprintf("ip:%d:%d:%d", ipMax, ipWindow, ipBlock), ipMax, ipWindow, ipBlock),
+		getPolicyLimiter(fmt.Sprintf("id:%d:%d:%d", idMax, idWindow, idBlock), idMax, idWindow, idBlock)
+}
+
+func getPolicyLimiter(key string, attempts, windowMinutes, blockMinutes int) *ratelimit.Limiter {
+	policyRateLimiters.Lock()
+	defer policyRateLimiters.Unlock()
+	if existing, ok := policyRateLimiters.m[key]; ok {
+		return existing
+	}
+	created := ratelimit.New(attempts, time.Duration(windowMinutes)*time.Minute, time.Duration(blockMinutes)*time.Minute)
+	policyRateLimiters.m[key] = created
+	return created
+}
+
+func getOrDefaultInt(value *int, fallback int) int {
+	if value != nil && *value > 0 {
+		return *value
+	}
+	return fallback
 }
 
 func appendPasswordHistory(history []string, hash string) []string {
@@ -2804,6 +2903,14 @@ func securityPolicyToResponse(policy *domain.SecurityPolicy) SecurityPolicyRespo
 			AllowSSO:              cfg.AllowSSO,
 			TrustedDeviceTTLHours: cfg.TrustedDeviceTTLHours,
 			SessionTTLMinutes:     cfg.SessionTTLMinutes,
+			RefreshTTLMinutes:     cfg.RefreshTTLMinutes,
+			StepUpTTLMinutes:      cfg.StepUpTTLMinutes,
+			LoginIPMaxAttempts:    cfg.LoginIPMaxAttempts,
+			LoginIPWindowMinutes:  cfg.LoginIPWindowMinutes,
+			LoginIPBlockMinutes:   cfg.LoginIPBlockMinutes,
+			LoginIDMaxAttempts:    cfg.LoginIDMaxAttempts,
+			LoginIDWindowMinutes:  cfg.LoginIDWindowMinutes,
+			LoginIDBlockMinutes:   cfg.LoginIDBlockMinutes,
 			PasswordMinLength:     cfg.PasswordMinLength,
 			RequireUpper:          cfg.RequireUpper,
 			RequireLower:          cfg.RequireLower,

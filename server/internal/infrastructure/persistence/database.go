@@ -109,7 +109,7 @@ func SyncSecurityPolicies(db *gorm.DB) {
 			ScopeType:   "global",
 			Priority:    10,
 			Active:      true,
-			ConfigJSON:  `{"session_ttl_minutes":1440,"trusted_device_ttl_hours":720}`,
+			ConfigJSON:  `{"session_ttl_minutes":1440,"refresh_ttl_minutes":10080,"trusted_device_ttl_hours":720,"step_up_ttl_minutes":10,"login_ip_max_attempts":20,"login_ip_window_minutes":5,"login_ip_block_minutes":15,"login_identity_max_attempts":7,"login_identity_window_minutes":10,"login_identity_block_minutes":30}`,
 		},
 		{
 			Code:        "global-password-default",
@@ -129,6 +129,126 @@ func SyncSecurityPolicies(db *gorm.DB) {
 		}
 	}
 	log.Println("✅ Default security policies synchronized")
+}
+
+func SyncAuthClients(db *gorm.DB) {
+	clients := []GormAuthClient{
+		{
+			ClientID:            "web_portal",
+			Name:                "Web Portal",
+			Description:         "Public SPA for the admin web application",
+			AppType:             "web_app",
+			ClientTemplate:      "spa_web",
+			Environment:         "prod",
+			DomainGroup:         "admin",
+			OwnerTeam:           "identity",
+			Public:              true,
+			PKCERequired:        true,
+			Active:              true,
+			LegacyPasswordGrant: true,
+			ApprovalStatus:      "approved",
+			GrantTypesJSON:      `["password","refresh_token","authorization_code"]`,
+			RedirectURIsJSON:    `["https://app.company.com/callback"]`,
+			AudiencesJSON:       `["web-api"]`,
+			ChannelsJSON:        `["web"]`,
+			TrustedTypesJSON:    `["browser"]`,
+			TagsJSON:            `["portal","spa"]`,
+			SecretVersion:       1,
+		},
+		{
+			ClientID:            "crm_portal",
+			ClientSecret:        "crm_portal_secret",
+			Name:                "CRM Portal",
+			Description:         "Confidential client for CRM backoffice",
+			AppType:             "admin_portal",
+			ClientTemplate:      "crm_portal",
+			Environment:         "prod",
+			DomainGroup:         "crm",
+			OwnerTeam:           "crm",
+			Public:              false,
+			PKCERequired:        false,
+			Active:              true,
+			LegacyPasswordGrant: true,
+			ApprovalStatus:      "approved",
+			GrantTypesJSON:      `["password","refresh_token","authorization_code"]`,
+			RedirectURIsJSON:    `["https://crm.company.com/callback"]`,
+			AudiencesJSON:       `["crm-api"]`,
+			ChannelsJSON:        `["crm","web"]`,
+			TrustedTypesJSON:    `["browser","desktop"]`,
+			TagsJSON:            `["crm","backoffice"]`,
+			SecretVersion:       1,
+		},
+		{
+			ClientID:            "mobile_app_tpv_public",
+			Name:                "Mobile App",
+			Description:         "Public mobile application client with PKCE",
+			AppType:             "mobile_app",
+			ClientTemplate:      "mobile_pkce",
+			Environment:         "prod",
+			DomainGroup:         "mobile",
+			OwnerTeam:           "mobile",
+			Public:              true,
+			PKCERequired:        true,
+			Active:              true,
+			LegacyPasswordGrant: true,
+			ApprovalStatus:      "approved",
+			GrantTypesJSON:      `["password","refresh_token","authorization_code"]`,
+			RedirectURIsJSON:    `["myapp://oauth/callback"]`,
+			AudiencesJSON:       `["mobile-api"]`,
+			ChannelsJSON:        `["mobile"]`,
+			TrustedTypesJSON:    `["mobile"]`,
+			TagsJSON:            `["mobile","public"]`,
+			SecretVersion:       1,
+		},
+		{
+			ClientID:            "payment_service",
+			ClientSecret:        "payment_service_secret",
+			Name:                "Payment Service",
+			Description:         "Service account client for machine-to-machine payment jobs",
+			AppType:             "internal_service",
+			ClientTemplate:      "service_m2m",
+			Environment:         "prod",
+			DomainGroup:         "payments",
+			OwnerTeam:           "platform",
+			Public:              false,
+			PKCERequired:        false,
+			Active:              true,
+			LegacyPasswordGrant: false,
+			ApprovalStatus:      "approved",
+			GrantTypesJSON:      `["client_credentials"]`,
+			RedirectURIsJSON:    `[]`,
+			AudiencesJSON:       `["payment-api"]`,
+			ChannelsJSON:        `["service"]`,
+			TrustedTypesJSON:    `["server"]`,
+			TagsJSON:            `["service","payments"]`,
+			SecretVersion:       1,
+		},
+	}
+	for _, item := range clients {
+		var existing GormAuthClient
+		if err := db.Where("client_id = ?", item.ClientID).First(&existing).Error; err != nil {
+			db.Create(&item)
+		}
+	}
+	log.Println("✅ Default auth clients synchronized")
+}
+
+func SyncLoginChannels(db *gorm.DB) {
+	channels := []GormLoginChannel{
+		{Code: "web", Name: "Web Portal", Description: "Browser-based user login", RiskLevel: "medium", RequireMFA: false, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 720, SessionTTLMinutes: 1440, Active: true},
+		{Code: "crm", Name: "CRM Portal", Description: "Backoffice CRM login", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 336, SessionTTLMinutes: 720, Active: true},
+		{Code: "mobile", Name: "Mobile App", Description: "Native mobile application login", RiskLevel: "medium", RequireMFA: false, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 1440, SessionTTLMinutes: 43200, Active: true},
+		{Code: "service", Name: "Internal API / Service", Description: "Machine-to-machine integration", RiskLevel: "high", RequireMFA: false, AllowPassword: false, AllowSSO: false, TrustedDeviceTTLHours: 0, SessionTTLMinutes: 60, Active: true},
+		{Code: "kiosk", Name: "Kiosk", Description: "Public or semi-trusted kiosk devices", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: false, TrustedDeviceTTLHours: 24, SessionTTLMinutes: 120, Active: true},
+		{Code: "partner", Name: "Partner Portal", Description: "External partner access", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 168, SessionTTLMinutes: 480, Active: true},
+	}
+	for _, item := range channels {
+		var existing GormLoginChannel
+		if err := db.Where("code = ?", item.Code).First(&existing).Error; err != nil {
+			db.Create(&item)
+		}
+	}
+	log.Println("✅ Default login channels synchronized")
 }
 
 // Seed inserts initial data if the DB is empty
@@ -227,110 +347,6 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 		db.Create(&u.user)
 		db.Create(&GormUserRole{UserID: u.user.ID, RoleID: u.roleID})
 	}
-
-	clients := []GormAuthClient{
-		{
-			ClientID:            "web_portal",
-			Name:                "Web Portal",
-			Description:         "Public SPA for the admin web application",
-			AppType:             "web_app",
-			ClientTemplate:      "spa_web",
-			Environment:         "prod",
-			DomainGroup:         "admin",
-			OwnerTeam:           "identity",
-			Public:              true,
-			PKCERequired:        true,
-			Active:              true,
-			LegacyPasswordGrant: true,
-			ApprovalStatus:      "approved",
-			GrantTypesJSON:      `["password","refresh_token","authorization_code"]`,
-			RedirectURIsJSON:    `["https://app.company.com/callback"]`,
-			AudiencesJSON:       `["web-api"]`,
-			ChannelsJSON:        `["web"]`,
-			TrustedTypesJSON:    `["browser"]`,
-			TagsJSON:            `["portal","spa"]`,
-			SecretVersion:       1,
-		},
-		{
-			ClientID:            "crm_portal",
-			ClientSecret:        "crm_portal_secret",
-			Name:                "CRM Portal",
-			Description:         "Confidential client for CRM backoffice",
-			AppType:             "admin_portal",
-			ClientTemplate:      "crm_portal",
-			Environment:         "prod",
-			DomainGroup:         "crm",
-			OwnerTeam:           "crm",
-			Public:              false,
-			PKCERequired:        false,
-			Active:              true,
-			LegacyPasswordGrant: true,
-			ApprovalStatus:      "approved",
-			GrantTypesJSON:      `["password","refresh_token","authorization_code"]`,
-			RedirectURIsJSON:    `["https://crm.company.com/callback"]`,
-			AudiencesJSON:       `["crm-api"]`,
-			ChannelsJSON:        `["crm","web"]`,
-			TrustedTypesJSON:    `["browser","desktop"]`,
-			TagsJSON:            `["crm","backoffice"]`,
-			SecretVersion:       1,
-		},
-		{
-			ClientID:            "mobile_app_tpv_public",
-			Name:                "Mobile App",
-			Description:         "Public mobile application client with PKCE",
-			AppType:             "mobile_app",
-			ClientTemplate:      "mobile_pkce",
-			Environment:         "prod",
-			DomainGroup:         "mobile",
-			OwnerTeam:           "mobile",
-			Public:              true,
-			PKCERequired:        true,
-			Active:              true,
-			LegacyPasswordGrant: true,
-			ApprovalStatus:      "approved",
-			GrantTypesJSON:      `["password","refresh_token","authorization_code"]`,
-			RedirectURIsJSON:    `["myapp://oauth/callback"]`,
-			AudiencesJSON:       `["mobile-api"]`,
-			ChannelsJSON:        `["mobile"]`,
-			TrustedTypesJSON:    `["mobile"]`,
-			TagsJSON:            `["mobile","public"]`,
-			SecretVersion:       1,
-		},
-		{
-			ClientID:            "payment_service",
-			ClientSecret:        "payment_service_secret",
-			Name:                "Payment Service",
-			Description:         "Service account client for machine-to-machine payment jobs",
-			AppType:             "internal_service",
-			ClientTemplate:      "service_m2m",
-			Environment:         "prod",
-			DomainGroup:         "payments",
-			OwnerTeam:           "platform",
-			Public:              false,
-			PKCERequired:        false,
-			Active:              true,
-			LegacyPasswordGrant: false,
-			ApprovalStatus:      "approved",
-			GrantTypesJSON:      `["client_credentials"]`,
-			RedirectURIsJSON:    `[]`,
-			AudiencesJSON:       `["payment-api"]`,
-			ChannelsJSON:        `["service"]`,
-			TrustedTypesJSON:    `["server"]`,
-			TagsJSON:            `["service","payments"]`,
-			SecretVersion:       1,
-		},
-	}
-	db.CreateInBatches(clients, 20)
-
-	channels := []GormLoginChannel{
-		{Code: "web", Name: "Web Portal", Description: "Browser-based user login", RiskLevel: "medium", RequireMFA: false, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 720, SessionTTLMinutes: 1440, Active: true},
-		{Code: "crm", Name: "CRM Portal", Description: "Backoffice CRM login", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 336, SessionTTLMinutes: 720, Active: true},
-		{Code: "mobile", Name: "Mobile App", Description: "Native mobile application login", RiskLevel: "medium", RequireMFA: false, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 1440, SessionTTLMinutes: 43200, Active: true},
-		{Code: "service", Name: "Internal API / Service", Description: "Machine-to-machine integration", RiskLevel: "high", RequireMFA: false, AllowPassword: false, AllowSSO: false, TrustedDeviceTTLHours: 0, SessionTTLMinutes: 60, Active: true},
-		{Code: "kiosk", Name: "Kiosk", Description: "Public or semi-trusted kiosk devices", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: false, TrustedDeviceTTLHours: 24, SessionTTLMinutes: 120, Active: true},
-		{Code: "partner", Name: "Partner Portal", Description: "External partner access", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 168, SessionTTLMinutes: 480, Active: true},
-	}
-	db.CreateInBatches(channels, 20)
 
 	providers := []GormSSOProvider{
 		{

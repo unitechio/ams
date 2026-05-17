@@ -38,6 +38,8 @@ func main() {
 	// ── Sync permission constants → DB (idempotent on every start) ───────────
 	permRepo.SyncFromRegistry()
 	persistence.SyncMenus(db)
+	persistence.SyncAuthClients(db)
+	persistence.SyncLoginChannels(db)
 	persistence.SyncSecurityPolicies(db)
 
 	// ── Seed initial data (only if DB is empty) ───────────────────────────────
