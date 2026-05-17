@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   UserPlus, ArrowLeft, Loader2, ShieldCheck, Save,
-  Mail, User as UserIcon, Phone, Lock, Calendar,
+  Mail, User as UserIcon, Phone, Lock, Eye, EyeOff,
   UserCheck, ShieldAlert
 } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
@@ -23,6 +23,7 @@ export default function CreateUserPage() {
   const [roles, setRoles] = useState<ApiRole[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const [form, setForm] = useState({
     username: '', password: '', full_name: '', email: '',
@@ -109,12 +110,19 @@ export default function CreateUserPage() {
                   <div className="relative">
                     <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                     <Input
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       placeholder="••••••••"
                       value={form.password}
                       onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                      className="pl-9 h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
+                      className="pl-9 pr-10 h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(v => !v)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[11px] text-slate-400">{getPasswordPolicyHint()}</p>
