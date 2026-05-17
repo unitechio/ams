@@ -24,6 +24,7 @@ func Setup(
 	authH *AuthHandler,
 	userH *UserHandler,
 	clientH *ClientHandler,
+	ssoProviderH *SSOProviderHandler,
 	roleH *RoleHandler,
 	permH *PermissionHandler,
 	menuH *MenuHandler,
@@ -227,6 +228,27 @@ func Setup(
 				middleware.RequirePermission(permission.PermissionServiceDelete),
 				middleware.RequireStepUp(jwtSvc),
 				clientH.Delete,
+			)
+		}
+
+		ssoProviders := auth.Group("/sso-providers")
+		ssoProviders.Use(middleware.RequirePermission(permission.PermissionClientRead))
+		{
+			ssoProviders.GET("", ssoProviderH.List)
+			ssoProviders.POST("",
+				middleware.RequirePermission(permission.PermissionClientCreate),
+				middleware.RequireStepUp(jwtSvc),
+				ssoProviderH.Create,
+			)
+			ssoProviders.PUT("/:id",
+				middleware.RequirePermission(permission.PermissionClientUpdate),
+				middleware.RequireStepUp(jwtSvc),
+				ssoProviderH.Update,
+			)
+			ssoProviders.DELETE("/:id",
+				middleware.RequirePermission(permission.PermissionClientDelete),
+				middleware.RequireStepUp(jwtSvc),
+				ssoProviderH.Delete,
 			)
 		}
 

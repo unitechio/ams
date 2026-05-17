@@ -793,6 +793,117 @@ func clientToGorm(client *domain.AuthClient) *GormAuthClient {
 	}
 }
 
+// ─── SSO Provider Repository ────────────────────────────────────────────────
+
+type GormSSOProviderRepository struct{ db *gorm.DB }
+
+func NewGormSSOProviderRepository(db *gorm.DB) *GormSSOProviderRepository {
+	return &GormSSOProviderRepository{db}
+}
+
+func (r *GormSSOProviderRepository) FindByProviderID(providerID string) (*domain.SSOProvider, error) {
+	var model GormSSOProvider
+	if err := r.db.Where("provider_id = ?", providerID).First(&model).Error; err != nil {
+		return nil, err
+	}
+	return gormToSSOProvider(&model), nil
+}
+
+func (r *GormSSOProviderRepository) List(filters map[string]interface{}) ([]*domain.SSOProvider, int64, error) {
+	q := r.db.Model(&GormSSOProvider{})
+	if search, ok := filters["search"].(string); ok && strings.TrimSpace(search) != "" {
+		like := "%" + strings.TrimSpace(search) + "%"
+		q = q.Where("provider_id ILIKE ? OR name ILIKE ? OR type ILIKE ?", like, like, like)
+	}
+	if providerType, ok := filters["type"].(string); ok && strings.TrimSpace(providerType) != "" {
+		q = q.Where("type = ?", strings.TrimSpace(providerType))
+	}
+	if enabled, ok := filters["enabled"].(string); ok && strings.TrimSpace(enabled) != "" {
+		q = q.Where("enabled = ?", strings.EqualFold(enabled, "true"))
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	page, _ := filters["page"].(int)
+	pageSize, _ := filters["page_size"].(int)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+
+	var models []GormSSOProvider
+	if err := q.Order("id DESC").Offset(offset).Limit(pageSize).Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+	result := make([]*domain.SSOProvider, len(models))
+	for i, item := range models {
+		result[i] = gormToSSOProvider(&item)
+	}
+	return result, total, nil
+}
+
+func (r *GormSSOProviderRepository) Save(provider *domain.SSOProvider) error {
+	model := ssoProviderToGorm(provider)
+	var err error
+	if model.ID == 0 {
+		err = r.db.Create(model).Error
+	} else {
+		err = r.db.Save(model).Error
+	}
+	provider.ID = model.ID
+	return err
+}
+
+func (r *GormSSOProviderRepository) Delete(id uint) error {
+	return r.db.Delete(&GormSSOProvider{}, id).Error
+}
+
+func gormToSSOProvider(model *GormSSOProvider) *domain.SSOProvider {
+	return &domain.SSOProvider{
+		ID:                 model.ID,
+		ProviderID:         model.ProviderID,
+		Name:               model.Name,
+		Type:               model.Type,
+		ClientID:           model.ClientID,
+		ClientSecret:       model.ClientSecret,
+		AuthorizeURL:       model.AuthorizeURL,
+		TokenURL:           model.TokenURL,
+		UserInfoURL:        model.UserInfoURL,
+		RedirectURI:        model.RedirectURI,
+		Scope:              model.Scope,
+		SAMLLoginURL:       model.SAMLLoginURL,
+		Enabled:            model.Enabled,
+		AllowAutoProvision: model.AllowAutoProvision,
+		Icon:               model.Icon,
+		CreatedAt:          model.CreatedAt,
+		UpdatedAt:          model.UpdatedAt,
+	}
+}
+
+func ssoProviderToGorm(provider *domain.SSOProvider) *GormSSOProvider {
+	return &GormSSOProvider{
+		ID:                 provider.ID,
+		ProviderID:         provider.ProviderID,
+		Name:               provider.Name,
+		Type:               provider.Type,
+		ClientID:           provider.ClientID,
+		ClientSecret:       provider.ClientSecret,
+		AuthorizeURL:       provider.AuthorizeURL,
+		TokenURL:           provider.TokenURL,
+		UserInfoURL:        provider.UserInfoURL,
+		RedirectURI:        provider.RedirectURI,
+		Scope:              provider.Scope,
+		SAMLLoginURL:       provider.SAMLLoginURL,
+		Enabled:            provider.Enabled,
+		AllowAutoProvision: provider.AllowAutoProvision,
+		Icon:               provider.Icon,
+	}
+}
+
 // ─── Permission Repository ────────────────────────────────────────────────────
 
 func NewGormPermissionRepository(db *gorm.DB) *GormPermissionRepository {

@@ -181,6 +181,10 @@ type testClientRepo struct {
 	clients map[string]*domain.AuthClient
 }
 
+type testSSOProviderRepo struct {
+	providers map[string]*domain.SSOProvider
+}
+
 func newTestClientRepo() *testClientRepo {
 	return &testClientRepo{clients: map[string]*domain.AuthClient{
 		"web_portal": {
@@ -205,6 +209,27 @@ func newTestClientRepo() *testClientRepo {
 			GrantTypes:   []string{"client_credentials"},
 			Channels:     []string{"service"},
 			Audiences:    []string{"payment-api"},
+		},
+	}}
+}
+
+func newTestSSOProviderRepo() *testSSOProviderRepo {
+	return &testSSOProviderRepo{providers: map[string]*domain.SSOProvider{
+		"db-google": {
+			ID:                 1,
+			ProviderID:         "db-google",
+			Name:               "DB Google",
+			Type:               "oidc",
+			ClientID:           "db-google-client",
+			ClientSecret:       "db-google-secret",
+			AuthorizeURL:       "https://db.google/authorize",
+			TokenURL:           "https://db.google/token",
+			UserInfoURL:        "https://db.google/userinfo",
+			RedirectURI:        "http://localhost:5173/sso/callback/db-google",
+			Scope:              "openid profile email",
+			Enabled:            true,
+			AllowAutoProvision: true,
+			Icon:               "Chrome",
 		},
 	}}
 }
@@ -241,6 +266,49 @@ func (r *testClientRepo) Delete(id uint) error {
 		if client.ID == id {
 			delete(r.clients, key)
 			return nil
+		}
+	}
+	return nil
+}
+
+func (r *testSSOProviderRepo) FindByProviderID(providerID string) (*domain.SSOProvider, error) {
+	provider, ok := r.providers[providerID]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	cloned := *provider
+	return &cloned, nil
+}
+
+func (r *testSSOProviderRepo) List(filters map[string]interface{}) ([]*domain.SSOProvider, int64, error) {
+	result := make([]*domain.SSOProvider, 0, len(r.providers))
+	for _, provider := range r.providers {
+		cloned := *provider
+		if enabled, ok := filters["enabled"].(string); ok && enabled != "" {
+			expected := strings.EqualFold(enabled, "true")
+			if cloned.Enabled != expected {
+				continue
+			}
+		}
+		result = append(result, &cloned)
+	}
+	return result, int64(len(result)), nil
+}
+
+func (r *testSSOProviderRepo) Save(provider *domain.SSOProvider) error {
+	if provider.ID == 0 {
+		provider.ID = uint(len(r.providers) + 1)
+	}
+	cloned := *provider
+	r.providers[provider.ProviderID] = &cloned
+	return nil
+}
+
+func (r *testSSOProviderRepo) Delete(id uint) error {
+	for key, provider := range r.providers {
+		if provider.ID == id {
+			delete(r.providers, key)
+			break
 		}
 	}
 	return nil
@@ -601,5 +669,17 @@ func TestCompleteSSOProvisionsUserAndReturnsSession(t *testing.T) {
 	}
 	if !strings.HasPrefix(provisioned.Username, "sso") && !strings.HasPrefix(provisioned.Username, "sso-user") {
 		t.Fatalf("expected generated username for SSO user, got %q", provisioned.Username)
+	}
+}
+
+func TestListSSOProvidersPrefersRepository(t *testing.T) {
+	authUC := NewAuthUsecase(newtestUserRepo(), &testTokenRepo{}, newTestClientRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour), newTestSSOProviderRepo())
+
+	providers := authUC.ListSSOProviders()
+	if len(providers) != 1 {
+		t.Fatalf("expected db-backed providers only, got %d", len(providers))
+	}
+	if providers[0].ID != "db-google" {
+		t.Fatalf("expected provider id db-google, got %q", providers[0].ID)
 	}
 }

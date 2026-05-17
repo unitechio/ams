@@ -150,6 +150,28 @@ type GormAuthClient struct {
 
 func (GormAuthClient) TableName() string { return "sys_auth_clients" }
 
+type GormSSOProvider struct {
+	ID                 uint   `gorm:"primaryKey;autoIncrement"`
+	ProviderID         string `gorm:"uniqueIndex;size:100;not null"`
+	Name               string `gorm:"size:200;not null"`
+	Type               string `gorm:"size:50;not null;default:'oidc'"`
+	ClientID           string `gorm:"size:255;default:''"`
+	ClientSecret       string `gorm:"size:255;default:''"`
+	AuthorizeURL       string `gorm:"size:500;default:''"`
+	TokenURL           string `gorm:"size:500;default:''"`
+	UserInfoURL        string `gorm:"size:500;default:''"`
+	RedirectURI        string `gorm:"size:500;default:''"`
+	Scope              string `gorm:"size:500;default:''"`
+	SAMLLoginURL       string `gorm:"size:500;default:''"`
+	Enabled            bool   `gorm:"default:true"`
+	AllowAutoProvision bool   `gorm:"default:true"`
+	Icon               string `gorm:"size:100;default:''"`
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
+func (GormSSOProvider) TableName() string { return "sys_sso_providers" }
+
 type GormAuditLog struct {
 	ID         uint   `gorm:"primaryKey;autoIncrement"`
 	UserID     uint   `gorm:"index"`

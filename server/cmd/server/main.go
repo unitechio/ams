@@ -29,6 +29,7 @@ func main() {
 	menuRepo := persistence.NewGormMenuRepository(db)
 	tokenRepo := persistence.NewGormTokenRepository(db)
 	clientRepo := persistence.NewGormClientRepository(db)
+	ssoProviderRepo := persistence.NewGormSSOProviderRepository(db)
 	auditRepo := persistence.NewGormAuditLogRepository(db)
 	authHistRepo := persistence.NewGormAuthHistoryRepository(db)
 
@@ -52,9 +53,10 @@ func main() {
 	permLoader := persistence.NewPermLoader(db)
 
 	// ── Usecases ──────────────────────────────────────────────────────────────
-	authUC := usecase.NewAuthUsecase(userRepo, tokenRepo, clientRepo, permRepo, authHistRepo, jwtSvc)
+	authUC := usecase.NewAuthUsecase(userRepo, tokenRepo, clientRepo, permRepo, authHistRepo, jwtSvc, ssoProviderRepo)
 	userUC := usecase.NewUserUsecase(userRepo, tokenRepo)
 	clientUC := usecase.NewClientUsecase(clientRepo)
+	ssoProviderUC := usecase.NewSSOProviderUsecase(ssoProviderRepo)
 	roleUC := usecase.NewRoleUsecase(roleRepo)
 	permUC := usecase.NewPermissionUsecase(permRepo)
 	menuUC := usecase.NewMenuUsecase(menuRepo)
@@ -64,6 +66,7 @@ func main() {
 	authHandler := delivery.NewAuthHandler(authUC)
 	userHandler := delivery.NewUserHandler(userUC)
 	clientHandler := delivery.NewClientHandler(clientUC)
+	ssoProviderHandler := delivery.NewSSOProviderHandler(ssoProviderUC)
 	roleHandler := delivery.NewRoleHandler(roleUC)
 	permHandler := delivery.NewPermissionHandler(permUC)
 	menuHandler := delivery.NewMenuHandler(menuUC)
@@ -77,6 +80,7 @@ func main() {
 		authHandler,
 		userHandler,
 		clientHandler,
+		ssoProviderHandler,
 		roleHandler,
 		permHandler,
 		menuHandler,

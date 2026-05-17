@@ -60,6 +60,26 @@ type AuthClient struct {
 	UpdatedAt    time.Time
 }
 
+type SSOProvider struct {
+	ID                 uint
+	ProviderID         string
+	Name               string
+	Type               string
+	ClientID           string
+	ClientSecret       string
+	AuthorizeURL       string
+	TokenURL           string
+	UserInfoURL        string
+	RedirectURI        string
+	Scope              string
+	SAMLLoginURL       string
+	Enabled            bool
+	AllowAutoProvision bool
+	Icon               string
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
+}
+
 // EffectivePermissions resolves all permissions from user's roles
 func (u *User) EffectivePermissions() *permission.PermissionSet {
 	var eps []permission.EffectivePermission
@@ -276,6 +296,13 @@ type ClientRepository interface {
 	FindByClientID(clientID string) (*AuthClient, error)
 	List(filters map[string]interface{}) ([]*AuthClient, int64, error)
 	Save(client *AuthClient) error
+	Delete(id uint) error
+}
+
+type SSOProviderRepository interface {
+	FindByProviderID(providerID string) (*SSOProvider, error)
+	List(filters map[string]interface{}) ([]*SSOProvider, int64, error)
+	Save(provider *SSOProvider) error
 	Delete(id uint) error
 }
 

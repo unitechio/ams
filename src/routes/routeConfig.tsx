@@ -25,6 +25,7 @@ const AuditLogPage = lazy(() => import("@/pages/AuditLogPage"));
 const DevicesPage = lazy(() => import("@/pages/DevicesPage"));
 const AuthClientsPage = lazy(() => import("@/pages/AuthClientsPage"));
 const ServiceAccountsPage = lazy(() => import("@/pages/ServiceAccountsPage"));
+const SSOProvidersPage = lazy(() => import("@/pages/SSOProvidersPage"));
 const OAuthCallbackPage = lazy(() => import("@/pages/OAuthCallbackPage"));
 const SSOCallbackPage = lazy(() => import("@/pages/SSOCallbackPage"));
 
@@ -165,6 +166,14 @@ export const routes: RouteObject[] = [
         element: (
           <ProtectedRoute permissions={[PERMISSIONS.CLIENT_READ]}>
             {Loadable(AuthClientsPage)({})}
+          </ProtectedRoute>
+        ),
+      },
+      {
+        path: "sso-providers",
+        element: (
+          <ProtectedRoute permissions={[PERMISSIONS.CLIENT_READ]}>
+            {Loadable(SSOProvidersPage)({})}
           </ProtectedRoute>
         ),
       },

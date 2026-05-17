@@ -38,6 +38,7 @@ func Migrate(db *gorm.DB) {
 		&GormMenu{},
 		&GormRefreshToken{},
 		&GormAuthClient{},
+		&GormSSOProvider{},
 		&GormAuditLog{},
 		&GormAuthHistory{},
 	)
@@ -76,6 +77,7 @@ func SyncMenus(db *gorm.DB) {
 		{ID: 4, Title: "Menu Sidebar", URL: "/menus", SortOrder: 790, Icon: "Menu", PermissionCode: string(permission.PermissionMenuRead), ParentID: &u20},
 		{ID: 5, Title: "Permission", URL: "/permissions", SortOrder: 780, Icon: "Key", PermissionCode: string(permission.PermissionPermRead), ParentID: &u20},
 		{ID: 9, Title: "OAuth Clients", URL: "/auth-clients", SortOrder: 770, Icon: "AppWindow", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
+		{ID: 12, Title: "SSO Providers", URL: "/sso-providers", SortOrder: 765, Icon: "Waypoints", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
 		{ID: 11, Title: "Service Accounts", URL: "/service-accounts", SortOrder: 760, Icon: "Bot", PermissionCode: string(permission.PermissionServiceRead), ParentID: &u20},
 
 		{ID: 30, Title: "Nhật ký", URL: "#", SortOrder: 500, Icon: "FileText", PermissionCode: ""},
@@ -252,6 +254,50 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 	}
 	db.CreateInBatches(clients, 20)
 
+	providers := []GormSSOProvider{
+		{
+			ProviderID:         "google",
+			Name:               "Google Workspace",
+			Type:               "oidc",
+			ClientID:           "google-client-id",
+			ClientSecret:       "google-client-secret",
+			AuthorizeURL:       "https://accounts.google.com/o/oauth2/v2/auth",
+			TokenURL:           "https://oauth2.googleapis.com/token",
+			UserInfoURL:        "https://openidconnect.googleapis.com/v1/userinfo",
+			RedirectURI:        "http://localhost:5173/sso/callback/google",
+			Scope:              "openid profile email",
+			Enabled:            false,
+			AllowAutoProvision: true,
+			Icon:               "Chrome",
+		},
+		{
+			ProviderID:         "microsoft",
+			Name:               "Microsoft Entra ID",
+			Type:               "oidc",
+			ClientID:           "microsoft-client-id",
+			ClientSecret:       "microsoft-client-secret",
+			AuthorizeURL:       "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+			TokenURL:           "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+			UserInfoURL:        "https://graph.microsoft.com/oidc/userinfo",
+			RedirectURI:        "http://localhost:5173/sso/callback/microsoft",
+			Scope:              "openid profile email",
+			Enabled:            false,
+			AllowAutoProvision: true,
+			Icon:               "BadgeCheck",
+		},
+		{
+			ProviderID:         "enterprise",
+			Name:               "Enterprise SAML",
+			Type:               "saml",
+			RedirectURI:        "http://localhost:5173/sso/callback/enterprise",
+			SAMLLoginURL:       "https://idp.company.com/saml/login",
+			Enabled:            false,
+			AllowAutoProvision: false,
+			Icon:               "Building2",
+		},
+	}
+	db.CreateInBatches(providers, 10)
+
 	log.Println("✅ Seed complete")
 	log.Println("   👤 superadmin / Admin@123  →  Super Admin (*)")
 	log.Println("   👤 admin      / Admin@123  →  Admin (org scope)")
@@ -263,7 +309,7 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 // ResetSequences resets PostgreSQL SERIAL sequences to the max ID found in each table.
 // This is necessary after seeding records with manual ID values.
 func ResetSequences(db *gorm.DB) {
-	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_auth_clients", "sys_audit_logs", "sys_auth_histories"}
+	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_auth_clients", "sys_sso_providers", "sys_audit_logs", "sys_auth_histories"}
 	for _, table := range tables {
 		db.Exec(fmt.Sprintf("SELECT setval(pg_get_serial_sequence('%s', 'id'), COALESCE((SELECT MAX(id) FROM %s), 1))", table, table))
 	}

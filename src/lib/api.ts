@@ -264,6 +264,25 @@ export interface AuthClient {
   created_at: string;
 }
 
+export interface AdminSSOProvider {
+  id: number;
+  provider_id: string;
+  name: string;
+  type: string;
+  client_id: string;
+  client_secret: string;
+  authorize_url: string;
+  token_url: string;
+  user_info_url: string;
+  redirect_uri: string;
+  scope: string;
+  saml_login_url: string;
+  enabled: boolean;
+  allow_auto_provision: boolean;
+  icon: string;
+  created_at: string;
+}
+
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -385,6 +404,21 @@ export const clientsApi = {
       client_secret,
       grant_type: 'client_credentials',
     }),
+};
+
+export const ssoProvidersAdminApi = {
+  list: (params?: { search?: string; type?: string; enabled?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.type) q.set('type', params.type);
+    if (params?.enabled) q.set('enabled', params.enabled);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.page_size) q.set('page_size', String(params.page_size));
+    return get<PaginatedResponse<AdminSSOProvider>>(`/sso-providers?${q}`);
+  },
+  create: (data: Omit<AdminSSOProvider, 'id' | 'created_at'>) => post<AdminSSOProvider>('/sso-providers', data),
+  update: (id: number, data: Omit<AdminSSOProvider, 'id' | 'created_at'>) => put<AdminSSOProvider>(`/sso-providers/${id}`, data),
+  delete: (id: number) => del<void>(`/sso-providers/${id}`),
 };
 
 // ─── Users API ────────────────────────────────────────────────────────────────

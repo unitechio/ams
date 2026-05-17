@@ -159,12 +159,13 @@ type UserInfo struct {
 // ─── Auth Usecase ─────────────────────────────────────────────────────────────
 
 type AuthUsecase struct {
-	userRepo   domain.UserRepository
-	tokenRepo  domain.TokenRepository
-	clientRepo domain.ClientRepository
-	permRepo   domain.PermissionRepository
-	authRepo   domain.AuthHistoryRepository
-	jwt        *jwtpkg.Service
+	userRepo        domain.UserRepository
+	tokenRepo       domain.TokenRepository
+	clientRepo      domain.ClientRepository
+	ssoProviderRepo domain.SSOProviderRepository
+	permRepo        domain.PermissionRepository
+	authRepo        domain.AuthHistoryRepository
+	jwt             *jwtpkg.Service
 }
 
 type sessionContext struct {
@@ -198,8 +199,21 @@ func NewAuthUsecase(
 	permRepo domain.PermissionRepository,
 	authRepo domain.AuthHistoryRepository,
 	jwt *jwtpkg.Service,
+	providerRepos ...domain.SSOProviderRepository,
 ) *AuthUsecase {
-	return &AuthUsecase{userRepo, tokenRepo, clientRepo, permRepo, authRepo, jwt}
+	var providerRepo domain.SSOProviderRepository
+	if len(providerRepos) > 0 {
+		providerRepo = providerRepos[0]
+	}
+	return &AuthUsecase{
+		userRepo:        userRepo,
+		tokenRepo:       tokenRepo,
+		clientRepo:      clientRepo,
+		ssoProviderRepo: providerRepo,
+		permRepo:        permRepo,
+		authRepo:        authRepo,
+		jwt:             jwt,
+	}
 }
 
 func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
@@ -502,11 +516,15 @@ func (uc *AuthUsecase) AuthorizeCode(req *AuthorizeCodeRequest) (*AuthorizeCodeR
 }
 
 func (uc *AuthUsecase) CompleteSSO(providerID, code, state string, req *CompleteSSORequest) (*LoginResponse, error) {
-	identity, err := sso.Complete(providerID, state, code)
+	provider, err := uc.resolveSSOProvider(providerID)
 	if err != nil {
 		return nil, err
 	}
-	user, err := uc.findOrProvisionSSOUser(identity)
+	identity, err := sso.CompleteWithProvider(*provider, state, code)
+	if err != nil {
+		return nil, err
+	}
+	user, err := uc.findOrProvisionSSOUser(identity, provider.AllowAutoProvision)
 	if err != nil {
 		return nil, err
 	}
@@ -1323,6 +1341,135 @@ func (uc *ClientUsecase) findByID(id uint) (*domain.AuthClient, error) {
 	return nil, errors.New("client không tồn tại")
 }
 
+type CreateSSOProviderReq struct {
+	ProviderID         string `json:"provider_id" binding:"required"`
+	Name               string `json:"name" binding:"required"`
+	Type               string `json:"type"`
+	ClientID           string `json:"client_id"`
+	ClientSecret       string `json:"client_secret"`
+	AuthorizeURL       string `json:"authorize_url"`
+	TokenURL           string `json:"token_url"`
+	UserInfoURL        string `json:"user_info_url"`
+	RedirectURI        string `json:"redirect_uri"`
+	Scope              string `json:"scope"`
+	SAMLLoginURL       string `json:"saml_login_url"`
+	Enabled            bool   `json:"enabled"`
+	AllowAutoProvision bool   `json:"allow_auto_provision"`
+	Icon               string `json:"icon"`
+}
+
+type UpdateSSOProviderReq = CreateSSOProviderReq
+
+type SSOProviderResponse struct {
+	ID                 uint      `json:"id"`
+	ProviderID         string    `json:"provider_id"`
+	Name               string    `json:"name"`
+	Type               string    `json:"type"`
+	ClientID           string    `json:"client_id"`
+	ClientSecret       string    `json:"client_secret"`
+	AuthorizeURL       string    `json:"authorize_url"`
+	TokenURL           string    `json:"token_url"`
+	UserInfoURL        string    `json:"user_info_url"`
+	RedirectURI        string    `json:"redirect_uri"`
+	Scope              string    `json:"scope"`
+	SAMLLoginURL       string    `json:"saml_login_url"`
+	Enabled            bool      `json:"enabled"`
+	AllowAutoProvision bool      `json:"allow_auto_provision"`
+	Icon               string    `json:"icon"`
+	CreatedAt          time.Time `json:"created_at"`
+}
+
+type SSOProviderUsecase struct {
+	repo domain.SSOProviderRepository
+}
+
+func NewSSOProviderUsecase(repo domain.SSOProviderRepository) *SSOProviderUsecase {
+	return &SSOProviderUsecase{repo: repo}
+}
+
+func (uc *SSOProviderUsecase) List(filters map[string]interface{}, page, pageSize int) (*PaginatedResult[SSOProviderResponse], error) {
+	filters["page"] = page
+	filters["page_size"] = pageSize
+	providers, total, err := uc.repo.List(filters)
+	if err != nil {
+		return nil, err
+	}
+	data := make([]SSOProviderResponse, len(providers))
+	for i, provider := range providers {
+		data[i] = ssoProviderToResponse(provider)
+	}
+	return paginate(data, total, page, pageSize), nil
+}
+
+func (uc *SSOProviderUsecase) Create(req *CreateSSOProviderReq) (*SSOProviderResponse, error) {
+	provider := &domain.SSOProvider{
+		ProviderID:         strings.TrimSpace(req.ProviderID),
+		Name:               strings.TrimSpace(req.Name),
+		Type:               strings.TrimSpace(req.Type),
+		ClientID:           strings.TrimSpace(req.ClientID),
+		ClientSecret:       strings.TrimSpace(req.ClientSecret),
+		AuthorizeURL:       strings.TrimSpace(req.AuthorizeURL),
+		TokenURL:           strings.TrimSpace(req.TokenURL),
+		UserInfoURL:        strings.TrimSpace(req.UserInfoURL),
+		RedirectURI:        strings.TrimSpace(req.RedirectURI),
+		Scope:              strings.TrimSpace(req.Scope),
+		SAMLLoginURL:       strings.TrimSpace(req.SAMLLoginURL),
+		Enabled:            req.Enabled,
+		AllowAutoProvision: req.AllowAutoProvision,
+		Icon:               strings.TrimSpace(req.Icon),
+	}
+	normalizeSSOProvider(provider)
+	if err := uc.repo.Save(provider); err != nil {
+		return nil, err
+	}
+	resp := ssoProviderToResponse(provider)
+	return &resp, nil
+}
+
+func (uc *SSOProviderUsecase) Update(id uint, req *UpdateSSOProviderReq) (*SSOProviderResponse, error) {
+	provider, err := uc.findByID(id)
+	if err != nil {
+		return nil, err
+	}
+	provider.ProviderID = strings.TrimSpace(req.ProviderID)
+	provider.Name = strings.TrimSpace(req.Name)
+	provider.Type = strings.TrimSpace(req.Type)
+	provider.ClientID = strings.TrimSpace(req.ClientID)
+	provider.ClientSecret = strings.TrimSpace(req.ClientSecret)
+	provider.AuthorizeURL = strings.TrimSpace(req.AuthorizeURL)
+	provider.TokenURL = strings.TrimSpace(req.TokenURL)
+	provider.UserInfoURL = strings.TrimSpace(req.UserInfoURL)
+	provider.RedirectURI = strings.TrimSpace(req.RedirectURI)
+	provider.Scope = strings.TrimSpace(req.Scope)
+	provider.SAMLLoginURL = strings.TrimSpace(req.SAMLLoginURL)
+	provider.Enabled = req.Enabled
+	provider.AllowAutoProvision = req.AllowAutoProvision
+	provider.Icon = strings.TrimSpace(req.Icon)
+	normalizeSSOProvider(provider)
+	if err := uc.repo.Save(provider); err != nil {
+		return nil, err
+	}
+	resp := ssoProviderToResponse(provider)
+	return &resp, nil
+}
+
+func (uc *SSOProviderUsecase) Delete(id uint) error {
+	return uc.repo.Delete(id)
+}
+
+func (uc *SSOProviderUsecase) findByID(id uint) (*domain.SSOProvider, error) {
+	providers, _, err := uc.repo.List(map[string]interface{}{"page": 1, "page_size": 500})
+	if err != nil {
+		return nil, err
+	}
+	for _, provider := range providers {
+		if provider.ID == id {
+			return provider, nil
+		}
+	}
+	return nil, errors.New("provider SSO không tồn tại")
+}
+
 // ─── Role Usecase ─────────────────────────────────────────────────────────────
 
 type CreateRoleReq struct {
@@ -1771,6 +1918,18 @@ func normalizeClient(client *domain.AuthClient) {
 	}
 }
 
+func normalizeSSOProvider(provider *domain.SSOProvider) {
+	if provider.Type == "" {
+		provider.Type = "oidc"
+	}
+	if provider.Scope == "" && provider.Type != "saml" {
+		provider.Scope = "openid profile email"
+	}
+	if provider.Icon == "" {
+		provider.Icon = "Shield"
+	}
+}
+
 func clientToResponse(client *domain.AuthClient) ClientResponse {
 	return ClientResponse{
 		ID:           client.ID,
@@ -1788,6 +1947,27 @@ func clientToResponse(client *domain.AuthClient) ClientResponse {
 		Channels:     cloneStrings(client.Channels),
 		TrustedTypes: cloneStrings(client.TrustedTypes),
 		CreatedAt:    client.CreatedAt,
+	}
+}
+
+func ssoProviderToResponse(provider *domain.SSOProvider) SSOProviderResponse {
+	return SSOProviderResponse{
+		ID:                 provider.ID,
+		ProviderID:         provider.ProviderID,
+		Name:               provider.Name,
+		Type:               provider.Type,
+		ClientID:           provider.ClientID,
+		ClientSecret:       provider.ClientSecret,
+		AuthorizeURL:       provider.AuthorizeURL,
+		TokenURL:           provider.TokenURL,
+		UserInfoURL:        provider.UserInfoURL,
+		RedirectURI:        provider.RedirectURI,
+		Scope:              provider.Scope,
+		SAMLLoginURL:       provider.SAMLLoginURL,
+		Enabled:            provider.Enabled,
+		AllowAutoProvision: provider.AllowAutoProvision,
+		Icon:               provider.Icon,
+		CreatedAt:          provider.CreatedAt,
 	}
 }
 
@@ -1852,7 +2032,7 @@ func containsOrEmpty(haystack []string, needle string) bool {
 	return false
 }
 
-func (uc *AuthUsecase) findOrProvisionSSOUser(identity *sso.Identity) (*domain.User, error) {
+func (uc *AuthUsecase) findOrProvisionSSOUser(identity *sso.Identity, allowAutoProvision bool) (*domain.User, error) {
 	user, err := uc.userRepo.FindByEmail(identity.Email)
 	if err == nil {
 		changed := false
@@ -1870,6 +2050,9 @@ func (uc *AuthUsecase) findOrProvisionSSOUser(identity *sso.Identity) (*domain.U
 			}
 		}
 		return user, nil
+	}
+	if !allowAutoProvision {
+		return nil, errors.New("tài khoản chưa được liên kết với SSO provider này")
 	}
 	passwordHash, hashErr := passwordsvc.Hash(generateOpaqueID(24) + "Aa1!")
 	if hashErr != nil {
@@ -1939,6 +2122,71 @@ func sanitizeUsername(raw string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-._")
+}
+
+func (uc *AuthUsecase) ListSSOProviders() []sso.Provider {
+	if uc.ssoProviderRepo != nil {
+		providers, total, err := uc.ssoProviderRepo.List(map[string]interface{}{
+			"page":      1,
+			"page_size": 100,
+		})
+		if err == nil && total > 0 {
+			result := make([]sso.Provider, 0, len(providers))
+			for _, provider := range providers {
+				if provider.Enabled {
+					result = append(result, domainToSSOProvider(provider))
+				}
+			}
+			return result
+		}
+	}
+	return sso.List()
+}
+
+func (uc *AuthUsecase) StartSSO(providerID string) (string, error) {
+	provider, err := uc.resolveSSOProvider(providerID)
+	if err != nil {
+		return "", err
+	}
+	redirectURL, _, err := sso.StartURLForProvider(*provider)
+	return redirectURL, err
+}
+
+func (uc *AuthUsecase) resolveSSOProvider(providerID string) (*sso.Provider, error) {
+	if uc.ssoProviderRepo != nil {
+		provider, err := uc.ssoProviderRepo.FindByProviderID(strings.TrimSpace(providerID))
+		if err == nil {
+			if !provider.Enabled {
+				return nil, errors.New("provider SSO đang bị vô hiệu hóa")
+			}
+			resolved := domainToSSOProvider(provider)
+			return &resolved, nil
+		}
+	}
+	for _, provider := range sso.List() {
+		if provider.ID == strings.TrimSpace(providerID) {
+			cloned := provider
+			return &cloned, nil
+		}
+	}
+	return nil, errors.New("provider SSO không tồn tại hoặc chưa được cấu hình")
+}
+
+func domainToSSOProvider(provider *domain.SSOProvider) sso.Provider {
+	return sso.Provider{
+		ID:                 provider.ProviderID,
+		Name:               provider.Name,
+		Type:               provider.Type,
+		AllowAutoProvision: provider.AllowAutoProvision,
+		ClientID:           provider.ClientID,
+		ClientSecret:       provider.ClientSecret,
+		AuthorizeURL:       provider.AuthorizeURL,
+		TokenURL:           provider.TokenURL,
+		UserInfoURL:        provider.UserInfoURL,
+		RedirectURI:        provider.RedirectURI,
+		Scope:              provider.Scope,
+		SAMLLoginURL:       provider.SAMLLoginURL,
+	}
 }
 
 func (uc *AuthUsecase) validateClientAccess(user *domain.User, req *LoginRequest) (*domain.AuthClient, string, string, string, error) {

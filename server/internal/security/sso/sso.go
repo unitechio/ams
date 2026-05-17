@@ -16,17 +16,18 @@ import (
 )
 
 type Provider struct {
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	ClientID     string `json:"client_id,omitempty"`
-	ClientSecret string `json:"-"`
-	AuthorizeURL string `json:"authorize_url,omitempty"`
-	TokenURL     string `json:"token_url,omitempty"`
-	UserInfoURL  string `json:"user_info_url,omitempty"`
-	RedirectURI  string `json:"redirect_uri,omitempty"`
-	Scope        string `json:"scope,omitempty"`
-	SAMLLoginURL string `json:"saml_login_url,omitempty"`
+	ID                 string `json:"id"`
+	Name               string `json:"name"`
+	Type               string `json:"type"`
+	AllowAutoProvision bool   `json:"allow_auto_provision"`
+	ClientID           string `json:"client_id,omitempty"`
+	ClientSecret       string `json:"-"`
+	AuthorizeURL       string `json:"authorize_url,omitempty"`
+	TokenURL           string `json:"token_url,omitempty"`
+	UserInfoURL        string `json:"user_info_url,omitempty"`
+	RedirectURI        string `json:"redirect_uri,omitempty"`
+	Scope              string `json:"scope,omitempty"`
+	SAMLLoginURL       string `json:"saml_login_url,omitempty"`
 }
 
 type Identity struct {
@@ -85,10 +86,9 @@ func List() []Provider {
 	return result
 }
 
-func StartURL(providerID string) (string, string, error) {
-	provider, err := findProvider(providerID)
-	if err != nil {
-		return "", "", err
+func StartURLForProvider(provider Provider) (string, string, error) {
+	if strings.TrimSpace(provider.ID) == "" {
+		return "", "", errors.New("provider SSO không tồn tại hoặc chưa được cấu hình")
 	}
 	state, err := newState(provider.ID)
 	if err != nil {
@@ -111,17 +111,29 @@ func StartURL(providerID string) (string, string, error) {
 	return "", "", errors.New("provider SSO không tồn tại hoặc chưa được cấu hình")
 }
 
+func StartURL(providerID string) (string, string, error) {
+	provider, err := findProvider(providerID)
+	if err != nil {
+		return "", "", err
+	}
+	return StartURLForProvider(*provider)
+}
+
 func Complete(providerID, state, code string) (*Identity, error) {
 	provider, err := findProvider(providerID)
 	if err != nil {
 		return nil, err
 	}
+	return CompleteWithProvider(*provider, state, code)
+}
+
+func CompleteWithProvider(provider Provider, state, code string) (*Identity, error) {
 	if err := consumeState(provider.ID, state); err != nil {
 		return nil, err
 	}
 	switch provider.Type {
 	case "oauth2", "oidc":
-		return exchangeOIDC(provider, code)
+		return exchangeOIDC(&provider, code)
 	case "saml":
 		return nil, errors.New("SAML callback cần ACS/metadata riêng, chưa hỗ trợ qua complete endpoint này")
 	default:
@@ -168,16 +180,17 @@ func loadOIDCProvider(key, name, authorizeURL, tokenURL, userInfoURL, defaultSco
 		providerType = "oidc"
 	}
 	return Provider{
-		ID:           key,
-		Name:         name,
-		Type:         providerType,
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		AuthorizeURL: authorizeURL,
-		TokenURL:     tokenURL,
-		UserInfoURL:  userInfoURL,
-		RedirectURI:  redirectURI,
-		Scope:        scope,
+		ID:                 key,
+		Name:               name,
+		Type:               providerType,
+		AllowAutoProvision: true,
+		ClientID:           clientID,
+		ClientSecret:       clientSecret,
+		AuthorizeURL:       authorizeURL,
+		TokenURL:           tokenURL,
+		UserInfoURL:        userInfoURL,
+		RedirectURI:        redirectURI,
+		Scope:              scope,
 	}
 }
 
@@ -188,11 +201,12 @@ func loadSAMLProvider(key, name string) Provider {
 		return Provider{}
 	}
 	return Provider{
-		ID:           key,
-		Name:         name,
-		Type:         "saml",
-		SAMLLoginURL: loginURL,
-		RedirectURI:  strings.TrimSpace(os.Getenv(prefix + "REDIRECT_URI")),
+		ID:                 key,
+		Name:               name,
+		Type:               "saml",
+		AllowAutoProvision: false,
+		SAMLLoginURL:       loginURL,
+		RedirectURI:        strings.TrimSpace(os.Getenv(prefix + "REDIRECT_URI")),
 	}
 }
 
