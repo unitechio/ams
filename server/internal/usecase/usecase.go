@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -164,6 +166,7 @@ type AuthUsecase struct {
 	tokenRepo       domain.TokenRepository
 	clientRepo      domain.ClientRepository
 	channelRepo     domain.LoginChannelRepository
+	policyRepo      domain.SecurityPolicyRepository
 	ssoProviderRepo domain.SSOProviderRepository
 	permRepo        domain.PermissionRepository
 	authRepo        domain.AuthHistoryRepository
@@ -181,6 +184,21 @@ type sessionContext struct {
 	UserAgent         string
 	Trusted           bool
 	RotatedFrom       string
+	SessionTTLMinutes int
+	TrustedDeviceTTL  int
+}
+
+type securityPolicyConfig struct {
+	RequireMFA            *bool `json:"require_mfa,omitempty"`
+	AllowPassword         *bool `json:"allow_password,omitempty"`
+	AllowSSO              *bool `json:"allow_sso,omitempty"`
+	TrustedDeviceTTLHours *int  `json:"trusted_device_ttl_hours,omitempty"`
+	SessionTTLMinutes     *int  `json:"session_ttl_minutes,omitempty"`
+	PasswordMinLength     *int  `json:"password_min_length,omitempty"`
+	RequireUpper          *bool `json:"require_upper,omitempty"`
+	RequireLower          *bool `json:"require_lower,omitempty"`
+	RequireNumber         *bool `json:"require_number,omitempty"`
+	RequireSpecial        *bool `json:"require_special,omitempty"`
 }
 
 type authorizationCode struct {
@@ -199,6 +217,7 @@ func NewAuthUsecase(
 	tokenRepo domain.TokenRepository,
 	clientRepo domain.ClientRepository,
 	channelRepo domain.LoginChannelRepository,
+	policyRepo domain.SecurityPolicyRepository,
 	permRepo domain.PermissionRepository,
 	authRepo domain.AuthHistoryRepository,
 	jwt *jwtpkg.Service,
@@ -213,6 +232,7 @@ func NewAuthUsecase(
 		tokenRepo:       tokenRepo,
 		clientRepo:      clientRepo,
 		channelRepo:     channelRepo,
+		policyRepo:      policyRepo,
 		ssoProviderRepo: providerRepo,
 		permRepo:        permRepo,
 		authRepo:        authRepo,
@@ -283,7 +303,11 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 			trustedDevice = true
 		}
 	}
+	loginPolicy := uc.resolvePolicy("auth", client.ClientID, loginChannel.Code)
 	channelRequiresMFA := loginChannel != nil && loginChannel.RequireMFA
+	if loginPolicy != nil && loginPolicy.RequireMFA != nil {
+		channelRequiresMFA = *loginPolicy.RequireMFA
+	}
 	if user.TwoFactorEnabled {
 		if strings.TrimSpace(req.OTPCode) == "" {
 			uc.recordLoginHistory(user.ID, req.Username, req.IPAddress, req.UserAgent, "failed", "Thiếu mã TOTP")
@@ -334,6 +358,8 @@ func (uc *AuthUsecase) Login(req *LoginRequest) (*LoginResponse, error) {
 		IPAddress:         req.IPAddress,
 		UserAgent:         req.UserAgent,
 		Trusted:           trustedDevice || req.TrustDevice,
+		SessionTTLMinutes: policyInt(loginPolicy, "session"),
+		TrustedDeviceTTL:  policyInt(loginPolicy, "trusted"),
 	})
 }
 
@@ -581,7 +607,11 @@ func (uc *AuthUsecase) CompleteSSO(providerID, code, state string, req *Complete
 			trustedDevice = true
 		}
 	}
+	loginPolicy := uc.resolvePolicy("auth", client.ClientID, loginChannel.Code)
 	channelRequiresMFA := loginChannel != nil && loginChannel.RequireMFA
+	if loginPolicy != nil && loginPolicy.RequireMFA != nil {
+		channelRequiresMFA = *loginPolicy.RequireMFA
+	}
 	if user.TwoFactorEnabled {
 		if strings.TrimSpace(req.OTPCode) == "" {
 			uc.recordLoginHistory(user.ID, user.Username, req.IPAddress, req.UserAgent, "failed", "Thiếu mã TOTP cho SSO")
@@ -619,6 +649,8 @@ func (uc *AuthUsecase) CompleteSSO(providerID, code, state string, req *Complete
 		IPAddress:         req.IPAddress,
 		UserAgent:         req.UserAgent,
 		Trusted:           trustedDevice || req.TrustDevice,
+		SessionTTLMinutes: policyInt(loginPolicy, "session"),
+		TrustedDeviceTTL:  policyInt(loginPolicy, "trusted"),
 	})
 }
 
@@ -663,7 +695,7 @@ func (uc *AuthUsecase) ChangePassword(userID uint, oldPw, newPw string) error {
 	if verifyErr != nil || !passwordOK {
 		return errors.New("mật khẩu cũ không đúng")
 	}
-	if err := validatePasswordPolicy(user, newPw); err != nil {
+	if err := validatePasswordPolicy(user, newPw, uc.resolvePasswordPolicy("")); err != nil {
 		return err
 	}
 	hash, _ := passwordsvc.Hash(newPw)
@@ -705,6 +737,18 @@ func (uc *AuthUsecase) buildLoginResponse(user *domain.User, session sessionCont
 	refreshStr, expiry, err := uc.jwt.GenerateRefreshToken(user.ID, user.Username, session.SessionID, session.ClientID)
 	if err != nil {
 		return nil, err
+	}
+	if session.SessionTTLMinutes > 0 {
+		customExpiry := time.Now().Add(time.Duration(session.SessionTTLMinutes) * time.Minute)
+		if customExpiry.Before(expiry) {
+			expiry = customExpiry
+		}
+	}
+	if session.Trusted && session.TrustedDeviceTTL > 0 {
+		trustedExpiry := time.Now().Add(time.Duration(session.TrustedDeviceTTL) * time.Hour)
+		if trustedExpiry.Before(expiry) {
+			expiry = trustedExpiry
+		}
 	}
 	uc.tokenRepo.Save(&domain.RefreshToken{
 		UserID:            user.ID,
@@ -956,7 +1000,7 @@ func (uc *AuthUsecase) ResetPasswordWithToken(token string, newPassword string) 
 	if err != nil {
 		return errors.New("người dùng không tồn tại")
 	}
-	if err := validatePasswordPolicy(user, newPassword); err != nil {
+	if err := validatePasswordPolicy(user, newPassword, uc.resolvePasswordPolicy("")); err != nil {
 		return err
 	}
 	hash, _ := passwordsvc.Hash(newPassword)
@@ -1087,12 +1131,13 @@ type PaginatedResult[T any] struct {
 }
 
 type UserUsecase struct {
-	repo      domain.UserRepository
-	tokenRepo domain.TokenRepository
+	repo       domain.UserRepository
+	tokenRepo  domain.TokenRepository
+	policyRepo domain.SecurityPolicyRepository
 }
 
-func NewUserUsecase(repo domain.UserRepository, tokenRepo domain.TokenRepository) *UserUsecase {
-	return &UserUsecase{repo: repo, tokenRepo: tokenRepo}
+func NewUserUsecase(repo domain.UserRepository, tokenRepo domain.TokenRepository, policyRepo domain.SecurityPolicyRepository) *UserUsecase {
+	return &UserUsecase{repo: repo, tokenRepo: tokenRepo, policyRepo: policyRepo}
 }
 
 func (uc *UserUsecase) List(spec interface{}, page, pageSize int) (*PaginatedResult[UserResponse], error) {
@@ -1130,7 +1175,7 @@ func (uc *UserUsecase) Create(req *CreateUserReq) (*UserResponse, error) {
 		AllowedClients:    req.AllowedClients,
 		AllowedChannels:   req.AllowedChannels,
 	}
-	if err := validatePasswordPolicy(u, req.Password); err != nil {
+	if err := validatePasswordPolicy(u, req.Password, uc.resolvePasswordPolicy("")); err != nil {
 		return nil, err
 	}
 	hash, err := passwordsvc.Hash(req.Password)
@@ -1213,7 +1258,7 @@ func (uc *UserUsecase) ResetPassword(id uint, newPassword string, oneTimePasswor
 	if err != nil {
 		return errors.New("người dùng không tồn tại")
 	}
-	if err := validatePasswordPolicy(u, newPassword); err != nil {
+	if err := validatePasswordPolicy(u, newPassword, uc.resolvePasswordPolicy("")); err != nil {
 		return err
 	}
 	hash, _ := passwordsvc.Hash(newPassword)
@@ -1662,6 +1707,147 @@ func (uc *LoginChannelUsecase) findByID(id uint) (*domain.LoginChannel, error) {
 	return nil, errors.New("login channel không tồn tại")
 }
 
+type SecurityPolicyRulePayload struct {
+	RequireMFA            *bool `json:"require_mfa,omitempty"`
+	AllowPassword         *bool `json:"allow_password,omitempty"`
+	AllowSSO              *bool `json:"allow_sso,omitempty"`
+	TrustedDeviceTTLHours *int  `json:"trusted_device_ttl_hours,omitempty"`
+	SessionTTLMinutes     *int  `json:"session_ttl_minutes,omitempty"`
+	PasswordMinLength     *int  `json:"password_min_length,omitempty"`
+	RequireUpper          *bool `json:"require_upper,omitempty"`
+	RequireLower          *bool `json:"require_lower,omitempty"`
+	RequireNumber         *bool `json:"require_number,omitempty"`
+	RequireSpecial        *bool `json:"require_special,omitempty"`
+}
+
+type CreateSecurityPolicyReq struct {
+	Code          string                    `json:"code" binding:"required"`
+	Name          string                    `json:"name" binding:"required"`
+	Description   string                    `json:"description"`
+	PolicyType    string                    `json:"policy_type"`
+	ScopeType     string                    `json:"scope_type"`
+	TargetClient  string                    `json:"target_client"`
+	TargetChannel string                    `json:"target_channel"`
+	Priority      int                       `json:"priority"`
+	Active        bool                      `json:"active"`
+	Config        SecurityPolicyRulePayload `json:"config"`
+}
+
+type UpdateSecurityPolicyReq = CreateSecurityPolicyReq
+
+type SecurityPolicyResponse struct {
+	ID            uint                      `json:"id"`
+	Code          string                    `json:"code"`
+	Name          string                    `json:"name"`
+	Description   string                    `json:"description"`
+	PolicyType    string                    `json:"policy_type"`
+	ScopeType     string                    `json:"scope_type"`
+	TargetClient  string                    `json:"target_client"`
+	TargetChannel string                    `json:"target_channel"`
+	Priority      int                       `json:"priority"`
+	Active        bool                      `json:"active"`
+	Config        SecurityPolicyRulePayload `json:"config"`
+	ConfigJSON    string                    `json:"config_json"`
+	CreatedAt     time.Time                 `json:"created_at"`
+}
+
+type SecurityPolicyUsecase struct {
+	repo domain.SecurityPolicyRepository
+}
+
+func NewSecurityPolicyUsecase(repo domain.SecurityPolicyRepository) *SecurityPolicyUsecase {
+	return &SecurityPolicyUsecase{repo: repo}
+}
+
+func (uc *SecurityPolicyUsecase) List(filters map[string]interface{}, page, pageSize int) (*PaginatedResult[SecurityPolicyResponse], error) {
+	filters["page"] = page
+	filters["page_size"] = pageSize
+	items, total, err := uc.repo.List(filters)
+	if err != nil {
+		return nil, err
+	}
+	data := make([]SecurityPolicyResponse, len(items))
+	for i, item := range items {
+		data[i] = securityPolicyToResponse(item)
+	}
+	return paginate(data, total, page, pageSize), nil
+}
+
+func (uc *SecurityPolicyUsecase) Create(req *CreateSecurityPolicyReq) (*SecurityPolicyResponse, error) {
+	configJSON, err := policyPayloadToJSON(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	policy := &domain.SecurityPolicy{
+		Code:          strings.TrimSpace(req.Code),
+		Name:          strings.TrimSpace(req.Name),
+		Description:   strings.TrimSpace(req.Description),
+		PolicyType:    strings.TrimSpace(req.PolicyType),
+		ScopeType:     strings.TrimSpace(req.ScopeType),
+		TargetClient:  strings.TrimSpace(req.TargetClient),
+		TargetChannel: strings.TrimSpace(req.TargetChannel),
+		Priority:      req.Priority,
+		Active:        req.Active,
+		ConfigJSON:    configJSON,
+	}
+	normalizeSecurityPolicy(policy)
+	if err := validateSecurityPolicyDefinition(policy); err != nil {
+		return nil, err
+	}
+	if err := uc.repo.Save(policy); err != nil {
+		return nil, err
+	}
+	resp := securityPolicyToResponse(policy)
+	return &resp, nil
+}
+
+func (uc *SecurityPolicyUsecase) Update(id uint, req *UpdateSecurityPolicyReq) (*SecurityPolicyResponse, error) {
+	policy, err := uc.findByID(id)
+	if err != nil {
+		return nil, err
+	}
+	configJSON, err := policyPayloadToJSON(req.Config)
+	if err != nil {
+		return nil, err
+	}
+	policy.Code = strings.TrimSpace(req.Code)
+	policy.Name = strings.TrimSpace(req.Name)
+	policy.Description = strings.TrimSpace(req.Description)
+	policy.PolicyType = strings.TrimSpace(req.PolicyType)
+	policy.ScopeType = strings.TrimSpace(req.ScopeType)
+	policy.TargetClient = strings.TrimSpace(req.TargetClient)
+	policy.TargetChannel = strings.TrimSpace(req.TargetChannel)
+	policy.Priority = req.Priority
+	policy.Active = req.Active
+	policy.ConfigJSON = configJSON
+	normalizeSecurityPolicy(policy)
+	if err := validateSecurityPolicyDefinition(policy); err != nil {
+		return nil, err
+	}
+	if err := uc.repo.Save(policy); err != nil {
+		return nil, err
+	}
+	resp := securityPolicyToResponse(policy)
+	return &resp, nil
+}
+
+func (uc *SecurityPolicyUsecase) Delete(id uint) error {
+	return uc.repo.Delete(id)
+}
+
+func (uc *SecurityPolicyUsecase) findByID(id uint) (*domain.SecurityPolicy, error) {
+	items, _, err := uc.repo.List(map[string]interface{}{"page": 1, "page_size": 500})
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		if item.ID == id {
+			return item, nil
+		}
+	}
+	return nil, errors.New("security policy không tồn tại")
+}
+
 // ─── Role Usecase ─────────────────────────────────────────────────────────────
 
 type CreateRoleReq struct {
@@ -2019,11 +2205,32 @@ func filterMenuByPermission(menus []*domain.Menu, ps *permission.PermissionSet) 
 	return result
 }
 
-func validatePasswordPolicy(user *domain.User, password string) error {
-	if len(password) < 8 {
-		return errors.New("mật khẩu phải có ít nhất 8 ký tự")
+func validatePasswordPolicy(user *domain.User, password string, policy *securityPolicyConfig) error {
+	minLength := 8
+	requireUpper := true
+	requireLower := true
+	requireNumber := true
+	requireSpecial := true
+	if policy != nil {
+		if policy.PasswordMinLength != nil && *policy.PasswordMinLength > 0 {
+			minLength = *policy.PasswordMinLength
+		}
+		if policy.RequireUpper != nil {
+			requireUpper = *policy.RequireUpper
+		}
+		if policy.RequireLower != nil {
+			requireLower = *policy.RequireLower
+		}
+		if policy.RequireNumber != nil {
+			requireNumber = *policy.RequireNumber
+		}
+		if policy.RequireSpecial != nil {
+			requireSpecial = *policy.RequireSpecial
+		}
 	}
-
+	if len(password) < minLength {
+		return fmt.Errorf("mật khẩu phải có ít nhất %d ký tự", minLength)
+	}
 	var hasUpper, hasLower, hasDigit, hasSpecial bool
 	for _, r := range password {
 		switch {
@@ -2038,8 +2245,8 @@ func validatePasswordPolicy(user *domain.User, password string) error {
 		}
 	}
 
-	if !hasUpper || !hasLower || !hasDigit || !hasSpecial {
-		return errors.New("mật khẩu phải gồm chữ hoa, chữ thường, số và ký tự đặc biệt")
+	if (requireUpper && !hasUpper) || (requireLower && !hasLower) || (requireNumber && !hasDigit) || (requireSpecial && !hasSpecial) {
+		return errors.New("mật khẩu chưa đáp ứng security policy hiện tại")
 	}
 
 	if user.PasswordHash != "" {
@@ -2055,6 +2262,147 @@ func validatePasswordPolicy(user *domain.User, password string) error {
 	}
 
 	return nil
+}
+
+func (uc *AuthUsecase) resolvePolicy(policyType, clientID, channel string) *securityPolicyConfig {
+	return resolvePolicyConfig(uc.policyRepo, policyType, clientID, channel)
+}
+
+func (uc *AuthUsecase) resolvePasswordPolicy(clientID string) *securityPolicyConfig {
+	return resolvePolicyConfig(uc.policyRepo, "password", clientID, "")
+}
+
+func (uc *UserUsecase) resolvePasswordPolicy(clientID string) *securityPolicyConfig {
+	return resolvePolicyConfig(uc.policyRepo, "password", clientID, "")
+}
+
+func resolvePolicyConfig(repo domain.SecurityPolicyRepository, policyType, clientID, channel string) *securityPolicyConfig {
+	if repo == nil {
+		return nil
+	}
+	items, _, err := repo.List(map[string]interface{}{
+		"policy_type": policyType,
+		"active":      "true",
+		"page":        1,
+		"page_size":   500,
+	})
+	if err != nil || len(items) == 0 {
+		return nil
+	}
+	applicable := make([]*domain.SecurityPolicy, 0)
+	for _, item := range items {
+		if policyApplies(item, clientID, channel) {
+			applicable = append(applicable, item)
+		}
+	}
+	if len(applicable) == 0 {
+		return nil
+	}
+	sort.SliceStable(applicable, func(i, j int) bool {
+		if applicable[i].Priority == applicable[j].Priority {
+			return policySpecificity(applicable[i]) < policySpecificity(applicable[j])
+		}
+		return applicable[i].Priority < applicable[j].Priority
+	})
+	merged := &securityPolicyConfig{}
+	for _, item := range applicable {
+		cfg := parseSecurityPolicyConfig(item.ConfigJSON)
+		mergeSecurityPolicyConfig(merged, cfg)
+	}
+	return merged
+}
+
+func policyApplies(item *domain.SecurityPolicy, clientID, channel string) bool {
+	switch strings.TrimSpace(item.ScopeType) {
+	case "", "global":
+		return true
+	case "client":
+		return strings.EqualFold(strings.TrimSpace(item.TargetClient), strings.TrimSpace(clientID))
+	case "channel":
+		return strings.EqualFold(strings.TrimSpace(item.TargetChannel), strings.TrimSpace(channel))
+	case "client_channel":
+		return strings.EqualFold(strings.TrimSpace(item.TargetClient), strings.TrimSpace(clientID)) &&
+			strings.EqualFold(strings.TrimSpace(item.TargetChannel), strings.TrimSpace(channel))
+	default:
+		return false
+	}
+}
+
+func policySpecificity(item *domain.SecurityPolicy) int {
+	switch strings.TrimSpace(item.ScopeType) {
+	case "global":
+		return 1
+	case "client":
+		return 2
+	case "channel":
+		return 3
+	case "client_channel":
+		return 4
+	default:
+		return 99
+	}
+}
+
+func parseSecurityPolicyConfig(raw string) *securityPolicyConfig {
+	cfg := &securityPolicyConfig{}
+	if strings.TrimSpace(raw) == "" {
+		return cfg
+	}
+	_ = json.Unmarshal([]byte(raw), cfg)
+	return cfg
+}
+
+func mergeSecurityPolicyConfig(base, next *securityPolicyConfig) {
+	if next == nil {
+		return
+	}
+	if next.RequireMFA != nil {
+		base.RequireMFA = next.RequireMFA
+	}
+	if next.AllowPassword != nil {
+		base.AllowPassword = next.AllowPassword
+	}
+	if next.AllowSSO != nil {
+		base.AllowSSO = next.AllowSSO
+	}
+	if next.TrustedDeviceTTLHours != nil {
+		base.TrustedDeviceTTLHours = next.TrustedDeviceTTLHours
+	}
+	if next.SessionTTLMinutes != nil {
+		base.SessionTTLMinutes = next.SessionTTLMinutes
+	}
+	if next.PasswordMinLength != nil {
+		base.PasswordMinLength = next.PasswordMinLength
+	}
+	if next.RequireUpper != nil {
+		base.RequireUpper = next.RequireUpper
+	}
+	if next.RequireLower != nil {
+		base.RequireLower = next.RequireLower
+	}
+	if next.RequireNumber != nil {
+		base.RequireNumber = next.RequireNumber
+	}
+	if next.RequireSpecial != nil {
+		base.RequireSpecial = next.RequireSpecial
+	}
+}
+
+func policyInt(cfg *securityPolicyConfig, kind string) int {
+	if cfg == nil {
+		return 0
+	}
+	switch kind {
+	case "session":
+		if cfg.SessionTTLMinutes != nil {
+			return *cfg.SessionTTLMinutes
+		}
+	case "trusted":
+		if cfg.TrustedDeviceTTLHours != nil {
+			return *cfg.TrustedDeviceTTLHours
+		}
+	}
+	return 0
 }
 
 func appendPasswordHistory(history []string, hash string) []string {
@@ -2320,6 +2668,55 @@ func normalizeLoginChannel(channel *domain.LoginChannel) {
 	}
 }
 
+func normalizeSecurityPolicy(policy *domain.SecurityPolicy) {
+	if policy.PolicyType == "" {
+		policy.PolicyType = "auth"
+	}
+	if policy.ScopeType == "" {
+		policy.ScopeType = "global"
+	}
+	if policy.Priority <= 0 {
+		policy.Priority = 100
+	}
+	if strings.TrimSpace(policy.ConfigJSON) == "" {
+		policy.ConfigJSON = "{}"
+	}
+}
+
+func validateSecurityPolicyDefinition(policy *domain.SecurityPolicy) error {
+	switch policy.PolicyType {
+	case "auth", "password":
+	default:
+		return errors.New("policy_type không hợp lệ")
+	}
+	switch policy.ScopeType {
+	case "global":
+	case "client":
+		if strings.TrimSpace(policy.TargetClient) == "" {
+			return errors.New("scope client yêu cầu target_client")
+		}
+	case "channel":
+		if strings.TrimSpace(policy.TargetChannel) == "" {
+			return errors.New("scope channel yêu cầu target_channel")
+		}
+	case "client_channel":
+		if strings.TrimSpace(policy.TargetClient) == "" || strings.TrimSpace(policy.TargetChannel) == "" {
+			return errors.New("scope client_channel yêu cầu cả target_client và target_channel")
+		}
+	default:
+		return errors.New("scope_type không hợp lệ")
+	}
+	return nil
+}
+
+func policyPayloadToJSON(payload SecurityPolicyRulePayload) (string, error) {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(raw), nil
+}
+
 func clientToResponse(client *domain.AuthClient) ClientResponse {
 	return ClientResponse{
 		ID:                  client.ID,
@@ -2385,6 +2782,36 @@ func loginChannelToResponse(channel *domain.LoginChannel) LoginChannelResponse {
 		SessionTTLMinutes:     channel.SessionTTLMinutes,
 		Active:                channel.Active,
 		CreatedAt:             channel.CreatedAt,
+	}
+}
+
+func securityPolicyToResponse(policy *domain.SecurityPolicy) SecurityPolicyResponse {
+	cfg := parseSecurityPolicyConfig(policy.ConfigJSON)
+	return SecurityPolicyResponse{
+		ID:            policy.ID,
+		Code:          policy.Code,
+		Name:          policy.Name,
+		Description:   policy.Description,
+		PolicyType:    policy.PolicyType,
+		ScopeType:     policy.ScopeType,
+		TargetClient:  policy.TargetClient,
+		TargetChannel: policy.TargetChannel,
+		Priority:      policy.Priority,
+		Active:        policy.Active,
+		Config: SecurityPolicyRulePayload{
+			RequireMFA:            cfg.RequireMFA,
+			AllowPassword:         cfg.AllowPassword,
+			AllowSSO:              cfg.AllowSSO,
+			TrustedDeviceTTLHours: cfg.TrustedDeviceTTLHours,
+			SessionTTLMinutes:     cfg.SessionTTLMinutes,
+			PasswordMinLength:     cfg.PasswordMinLength,
+			RequireUpper:          cfg.RequireUpper,
+			RequireLower:          cfg.RequireLower,
+			RequireNumber:         cfg.RequireNumber,
+			RequireSpecial:        cfg.RequireSpecial,
+		},
+		ConfigJSON: policy.ConfigJSON,
+		CreatedAt:  policy.CreatedAt,
 	}
 }
 
@@ -2666,6 +3093,13 @@ func (uc *AuthUsecase) validateClientAccess(user *domain.User, req *LoginRequest
 			return nil, nil, "", "", errors.New("login channel này không cho phép SSO login")
 		}
 		loginChannel = resolved
+	}
+	authPolicy := uc.resolvePolicy("auth", client.ClientID, channel)
+	if grantType == "password" && authPolicy != nil && authPolicy.AllowPassword != nil && !*authPolicy.AllowPassword {
+		return nil, nil, "", "", errors.New("security policy hiện tại không cho phép password login")
+	}
+	if grantType == "authorization_code" && authPolicy != nil && authPolicy.AllowSSO != nil && !*authPolicy.AllowSSO {
+		return nil, nil, "", "", errors.New("security policy hiện tại không cho phép SSO login")
 	}
 	deviceName := strings.TrimSpace(req.DeviceName)
 	if deviceName == "" {

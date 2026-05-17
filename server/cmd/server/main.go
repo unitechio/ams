@@ -31,12 +31,14 @@ func main() {
 	clientRepo := persistence.NewGormClientRepository(db)
 	ssoProviderRepo := persistence.NewGormSSOProviderRepository(db)
 	loginChannelRepo := persistence.NewGormLoginChannelRepository(db)
+	securityPolicyRepo := persistence.NewGormSecurityPolicyRepository(db)
 	auditRepo := persistence.NewGormAuditLogRepository(db)
 	authHistRepo := persistence.NewGormAuthHistoryRepository(db)
 
 	// ── Sync permission constants → DB (idempotent on every start) ───────────
 	permRepo.SyncFromRegistry()
 	persistence.SyncMenus(db)
+	persistence.SyncSecurityPolicies(db)
 
 	// ── Seed initial data (only if DB is empty) ───────────────────────────────
 	persistence.Seed(db, permRepo)
@@ -54,11 +56,12 @@ func main() {
 	permLoader := persistence.NewPermLoader(db)
 
 	// ── Usecases ──────────────────────────────────────────────────────────────
-	authUC := usecase.NewAuthUsecase(userRepo, tokenRepo, clientRepo, loginChannelRepo, permRepo, authHistRepo, jwtSvc, ssoProviderRepo)
-	userUC := usecase.NewUserUsecase(userRepo, tokenRepo)
+	authUC := usecase.NewAuthUsecase(userRepo, tokenRepo, clientRepo, loginChannelRepo, securityPolicyRepo, permRepo, authHistRepo, jwtSvc, ssoProviderRepo)
+	userUC := usecase.NewUserUsecase(userRepo, tokenRepo, securityPolicyRepo)
 	clientUC := usecase.NewClientUsecase(clientRepo, loginChannelRepo)
 	ssoProviderUC := usecase.NewSSOProviderUsecase(ssoProviderRepo)
 	loginChannelUC := usecase.NewLoginChannelUsecase(loginChannelRepo)
+	securityPolicyUC := usecase.NewSecurityPolicyUsecase(securityPolicyRepo)
 	roleUC := usecase.NewRoleUsecase(roleRepo)
 	permUC := usecase.NewPermissionUsecase(permRepo)
 	menuUC := usecase.NewMenuUsecase(menuRepo)
@@ -70,6 +73,7 @@ func main() {
 	clientHandler := delivery.NewClientHandler(clientUC)
 	ssoProviderHandler := delivery.NewSSOProviderHandler(ssoProviderUC)
 	loginChannelHandler := delivery.NewLoginChannelHandler(loginChannelUC)
+	securityPolicyHandler := delivery.NewSecurityPolicyHandler(securityPolicyUC)
 	roleHandler := delivery.NewRoleHandler(roleUC)
 	permHandler := delivery.NewPermissionHandler(permUC)
 	menuHandler := delivery.NewMenuHandler(menuUC)
@@ -85,6 +89,7 @@ func main() {
 		clientHandler,
 		ssoProviderHandler,
 		loginChannelHandler,
+		securityPolicyHandler,
 		roleHandler,
 		permHandler,
 		menuHandler,

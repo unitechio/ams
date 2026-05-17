@@ -1027,6 +1027,104 @@ func loginChannelToGorm(channel *domain.LoginChannel) *GormLoginChannel {
 	}
 }
 
+// ─── Security Policy Repository ──────────────────────────────────────────────
+
+type GormSecurityPolicyRepository struct{ db *gorm.DB }
+
+func NewGormSecurityPolicyRepository(db *gorm.DB) *GormSecurityPolicyRepository {
+	return &GormSecurityPolicyRepository{db}
+}
+
+func (r *GormSecurityPolicyRepository) List(filters map[string]interface{}) ([]*domain.SecurityPolicy, int64, error) {
+	q := r.db.Model(&GormSecurityPolicy{})
+	if search, ok := filters["search"].(string); ok && strings.TrimSpace(search) != "" {
+		like := "%" + strings.TrimSpace(search) + "%"
+		q = q.Where("code ILIKE ? OR name ILIKE ? OR policy_type ILIKE ? OR scope_type ILIKE ? OR target_client ILIKE ? OR target_channel ILIKE ?",
+			like, like, like, like, like, like)
+	}
+	if policyType, ok := filters["policy_type"].(string); ok && strings.TrimSpace(policyType) != "" {
+		q = q.Where("policy_type = ?", strings.TrimSpace(policyType))
+	}
+	if scopeType, ok := filters["scope_type"].(string); ok && strings.TrimSpace(scopeType) != "" {
+		q = q.Where("scope_type = ?", strings.TrimSpace(scopeType))
+	}
+	if active, ok := filters["active"].(string); ok && strings.TrimSpace(active) != "" {
+		q = q.Where("active = ?", strings.EqualFold(strings.TrimSpace(active), "true"))
+	}
+	var total int64
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	page, _ := filters["page"].(int)
+	pageSize, _ := filters["page_size"].(int)
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 {
+		pageSize = 20
+	}
+	offset := (page - 1) * pageSize
+	var models []GormSecurityPolicy
+	if err := q.Order("priority ASC, id DESC").Offset(offset).Limit(pageSize).Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+	result := make([]*domain.SecurityPolicy, len(models))
+	for i, item := range models {
+		result[i] = gormToSecurityPolicy(&item)
+	}
+	return result, total, nil
+}
+
+func (r *GormSecurityPolicyRepository) Save(policy *domain.SecurityPolicy) error {
+	model := securityPolicyToGorm(policy)
+	var err error
+	if model.ID == 0 {
+		err = r.db.Create(model).Error
+	} else {
+		err = r.db.Save(model).Error
+	}
+	policy.ID = model.ID
+	return err
+}
+
+func (r *GormSecurityPolicyRepository) Delete(id uint) error {
+	return r.db.Delete(&GormSecurityPolicy{}, id).Error
+}
+
+func gormToSecurityPolicy(model *GormSecurityPolicy) *domain.SecurityPolicy {
+	return &domain.SecurityPolicy{
+		ID:            model.ID,
+		Code:          model.Code,
+		Name:          model.Name,
+		Description:   model.Description,
+		PolicyType:    model.PolicyType,
+		ScopeType:     model.ScopeType,
+		TargetClient:  model.TargetClient,
+		TargetChannel: model.TargetChannel,
+		Priority:      model.Priority,
+		Active:        model.Active,
+		ConfigJSON:    model.ConfigJSON,
+		CreatedAt:     model.CreatedAt,
+		UpdatedAt:     model.UpdatedAt,
+	}
+}
+
+func securityPolicyToGorm(policy *domain.SecurityPolicy) *GormSecurityPolicy {
+	return &GormSecurityPolicy{
+		ID:            policy.ID,
+		Code:          policy.Code,
+		Name:          policy.Name,
+		Description:   policy.Description,
+		PolicyType:    policy.PolicyType,
+		ScopeType:     policy.ScopeType,
+		TargetClient:  policy.TargetClient,
+		TargetChannel: policy.TargetChannel,
+		Priority:      policy.Priority,
+		Active:        policy.Active,
+		ConfigJSON:    policy.ConfigJSON,
+	}
+}
+
 // ─── Permission Repository ────────────────────────────────────────────────────
 
 func NewGormPermissionRepository(db *gorm.DB) *GormPermissionRepository {

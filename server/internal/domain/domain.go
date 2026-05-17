@@ -106,6 +106,22 @@ type LoginChannel struct {
 	UpdatedAt             time.Time
 }
 
+type SecurityPolicy struct {
+	ID            uint
+	Code          string
+	Name          string
+	Description   string
+	PolicyType    string
+	ScopeType     string
+	TargetClient  string
+	TargetChannel string
+	Priority      int
+	Active        bool
+	ConfigJSON    string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
 // EffectivePermissions resolves all permissions from user's roles
 func (u *User) EffectivePermissions() *permission.PermissionSet {
 	var eps []permission.EffectivePermission
@@ -336,6 +352,12 @@ type LoginChannelRepository interface {
 	FindByCode(code string) (*LoginChannel, error)
 	List(filters map[string]interface{}) ([]*LoginChannel, int64, error)
 	Save(channel *LoginChannel) error
+	Delete(id uint) error
+}
+
+type SecurityPolicyRepository interface {
+	List(filters map[string]interface{}) ([]*SecurityPolicy, int64, error)
+	Save(policy *SecurityPolicy) error
 	Delete(id uint) error
 }
 

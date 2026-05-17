@@ -331,6 +331,33 @@ export interface LoginChannel {
   created_at: string;
 }
 
+export interface SecurityPolicy {
+  id: number;
+  code: string;
+  name: string;
+  description: string;
+  policy_type: string;
+  scope_type: string;
+  target_client: string;
+  target_channel: string;
+  priority: number;
+  active: boolean;
+  config: {
+    require_mfa?: boolean;
+    allow_password?: boolean;
+    allow_sso?: boolean;
+    trusted_device_ttl_hours?: number;
+    session_ttl_minutes?: number;
+    password_min_length?: number;
+    require_upper?: boolean;
+    require_lower?: boolean;
+    require_number?: boolean;
+    require_special?: boolean;
+  };
+  config_json: string;
+  created_at: string;
+}
+
 // ─── Auth API ─────────────────────────────────────────────────────────────────
 
 export const authApi = {
@@ -498,6 +525,22 @@ export const loginChannelsApi = {
   create: (data: Omit<LoginChannel, 'id' | 'created_at'>) => post<LoginChannel>('/login-channels', data),
   update: (id: number, data: Omit<LoginChannel, 'id' | 'created_at'>) => put<LoginChannel>(`/login-channels/${id}`, data),
   delete: (id: number) => del<void>(`/login-channels/${id}`),
+};
+
+export const securityPoliciesApi = {
+  list: (params?: { search?: string; policy_type?: string; scope_type?: string; active?: string; page?: number; page_size?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.search) q.set('search', params.search);
+    if (params?.policy_type) q.set('policy_type', params.policy_type);
+    if (params?.scope_type) q.set('scope_type', params.scope_type);
+    if (params?.active) q.set('active', params.active);
+    if (params?.page) q.set('page', String(params.page));
+    if (params?.page_size) q.set('page_size', String(params.page_size));
+    return get<PaginatedResponse<SecurityPolicy>>(`/security-policies?${q}`);
+  },
+  create: (data: Omit<SecurityPolicy, 'id' | 'created_at' | 'config_json'>) => post<SecurityPolicy>('/security-policies', data),
+  update: (id: number, data: Omit<SecurityPolicy, 'id' | 'created_at' | 'config_json'>) => put<SecurityPolicy>(`/security-policies/${id}`, data),
+  delete: (id: number) => del<void>(`/security-policies/${id}`),
 };
 
 // ─── Users API ────────────────────────────────────────────────────────────────

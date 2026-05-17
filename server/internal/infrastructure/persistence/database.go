@@ -40,6 +40,7 @@ func Migrate(db *gorm.DB) {
 		&GormAuthClient{},
 		&GormSSOProvider{},
 		&GormLoginChannel{},
+		&GormSecurityPolicy{},
 		&GormAuditLog{},
 		&GormAuthHistory{},
 	)
@@ -80,6 +81,7 @@ func SyncMenus(db *gorm.DB) {
 		{ID: 9, Title: "OAuth Clients", URL: "/auth-clients", SortOrder: 770, Icon: "AppWindow", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
 		{ID: 12, Title: "SSO Providers", URL: "/sso-providers", SortOrder: 765, Icon: "Waypoints", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
 		{ID: 13, Title: "Login Channels", URL: "/login-channels", SortOrder: 762, Icon: "Workflow", PermissionCode: string(permission.PermissionChannelRead), ParentID: &u20},
+		{ID: 14, Title: "Security Policies", URL: "/security-policies", SortOrder: 761, Icon: "ShieldAlert", PermissionCode: string(permission.PermissionPolicyRead), ParentID: &u20},
 		{ID: 11, Title: "Service Accounts", URL: "/service-accounts", SortOrder: 760, Icon: "Bot", PermissionCode: string(permission.PermissionServiceRead), ParentID: &u20},
 
 		{ID: 30, Title: "Nhật ký", URL: "#", SortOrder: 500, Icon: "FileText", PermissionCode: ""},
@@ -95,6 +97,38 @@ func SyncMenus(db *gorm.DB) {
 	}
 	ResetSequences(db)
 	log.Println("✅ System menus synchronized")
+}
+
+func SyncSecurityPolicies(db *gorm.DB) {
+	policies := []GormSecurityPolicy{
+		{
+			Code:        "global-auth-default",
+			Name:        "Global Auth Default",
+			Description: "Chính sách auth mặc định toàn hệ thống",
+			PolicyType:  "auth",
+			ScopeType:   "global",
+			Priority:    10,
+			Active:      true,
+			ConfigJSON:  `{"session_ttl_minutes":1440,"trusted_device_ttl_hours":720}`,
+		},
+		{
+			Code:        "global-password-default",
+			Name:        "Global Password Default",
+			Description: "Password policy mặc định toàn hệ thống",
+			PolicyType:  "password",
+			ScopeType:   "global",
+			Priority:    10,
+			Active:      true,
+			ConfigJSON:  `{"password_min_length":8,"require_upper":true,"require_lower":true,"require_number":true,"require_special":true}`,
+		},
+	}
+	for _, item := range policies {
+		var existing GormSecurityPolicy
+		if err := db.Where("code = ?", item.Code).First(&existing).Error; err != nil {
+			db.Create(&item)
+		}
+	}
+	log.Println("✅ Default security policies synchronized")
 }
 
 // Seed inserts initial data if the DB is empty
@@ -353,7 +387,7 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 // ResetSequences resets PostgreSQL SERIAL sequences to the max ID found in each table.
 // This is necessary after seeding records with manual ID values.
 func ResetSequences(db *gorm.DB) {
-	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_auth_clients", "sys_sso_providers", "sys_login_channels", "sys_audit_logs", "sys_auth_histories"}
+	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_auth_clients", "sys_sso_providers", "sys_login_channels", "sys_security_policies", "sys_audit_logs", "sys_auth_histories"}
 	for _, table := range tables {
 		db.Exec(fmt.Sprintf("SELECT setval(pg_get_serial_sequence('%s', 'id'), COALESCE((SELECT MAX(id) FROM %s), 1))", table, table))
 	}

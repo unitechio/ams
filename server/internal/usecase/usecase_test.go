@@ -189,6 +189,10 @@ type testLoginChannelRepo struct {
 	channels map[string]*domain.LoginChannel
 }
 
+type testSecurityPolicyRepo struct {
+	items []*domain.SecurityPolicy
+}
+
 func newTestClientRepo() *testClientRepo {
 	return &testClientRepo{clients: map[string]*domain.AuthClient{
 		"web_portal": {
@@ -290,6 +294,31 @@ func newTestLoginChannelRepo() *testLoginChannelRepo {
 			AllowSSO:          false,
 			SessionTTLMinutes: 60,
 			Active:            true,
+		},
+	}}
+}
+
+func newTestSecurityPolicyRepo() *testSecurityPolicyRepo {
+	return &testSecurityPolicyRepo{items: []*domain.SecurityPolicy{
+		{
+			ID:         1,
+			Code:       "global-auth-default",
+			Name:       "Global Auth",
+			PolicyType: "auth",
+			ScopeType:  "global",
+			Priority:   10,
+			Active:     true,
+			ConfigJSON: `{"session_ttl_minutes":1440,"trusted_device_ttl_hours":720}`,
+		},
+		{
+			ID:         2,
+			Code:       "global-password-default",
+			Name:       "Global Password",
+			PolicyType: "password",
+			ScopeType:  "global",
+			Priority:   10,
+			Active:     true,
+			ConfigJSON: `{"password_min_length":8,"require_upper":true,"require_lower":true,"require_number":true,"require_special":true}`,
 		},
 	}}
 }
@@ -411,6 +440,53 @@ func (r *testLoginChannelRepo) Delete(id uint) error {
 	return nil
 }
 
+func (r *testSecurityPolicyRepo) List(filters map[string]interface{}) ([]*domain.SecurityPolicy, int64, error) {
+	result := make([]*domain.SecurityPolicy, 0, len(r.items))
+	for _, item := range r.items {
+		cloned := *item
+		if policyType, ok := filters["policy_type"].(string); ok && policyType != "" && !strings.EqualFold(cloned.PolicyType, policyType) {
+			continue
+		}
+		if active, ok := filters["active"].(string); ok && active != "" {
+			expected := strings.EqualFold(active, "true")
+			if cloned.Active != expected {
+				continue
+			}
+		}
+		result = append(result, &cloned)
+	}
+	return result, int64(len(result)), nil
+}
+
+func (r *testSecurityPolicyRepo) Save(policy *domain.SecurityPolicy) error {
+	if policy.ID == 0 {
+		policy.ID = uint(len(r.items) + 1)
+	}
+	cloned := *policy
+	replaced := false
+	for i, item := range r.items {
+		if item.ID == policy.ID {
+			r.items[i] = &cloned
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		r.items = append(r.items, &cloned)
+	}
+	return nil
+}
+
+func (r *testSecurityPolicyRepo) Delete(id uint) error {
+	for i, item := range r.items {
+		if item.ID == id {
+			r.items = append(r.items[:i], r.items[i+1:]...)
+			break
+		}
+	}
+	return nil
+}
+
 func (r *testAuthHistoryRepo) Save(h *domain.AuthHistory) error {
 	r.items = append(r.items, h)
 	return nil
@@ -431,7 +507,7 @@ func hashForTest(t *testing.T, password string) string {
 
 func TestCreateUserStoresPasswordHistory(t *testing.T) {
 	repo := newtestUserRepo()
-	uc := NewUserUsecase(repo, nil)
+	uc := NewUserUsecase(repo, nil, newTestSecurityPolicyRepo())
 
 	resp, err := uc.Create(&CreateUserReq{
 		Username: "new.user",
@@ -463,7 +539,7 @@ func TestChangePasswordClearsOneTimePasswordAndPreventsReuse(t *testing.T) {
 		Status:          "active",
 	})
 	tokenRepo := &testTokenRepo{}
-	authUC := NewAuthUsecase(userRepo, tokenRepo, newTestClientRepo(), newTestLoginChannelRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, tokenRepo, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	if err := authUC.ChangePassword(7, "TempPass@123", "TempPass@123"); err == nil {
 		t.Fatalf("expected password reuse to be rejected")
@@ -491,7 +567,7 @@ func TestResetPasswordMarksAccountAsOneTimePassword(t *testing.T) {
 		PasswordHistory: []string{oldHash},
 		Status:          "active",
 	})
-	uc := NewUserUsecase(userRepo, &testTokenRepo{})
+	uc := NewUserUsecase(userRepo, &testTokenRepo{}, newTestSecurityPolicyRepo())
 
 	if err := uc.ResetPassword(12, "AdminReset@123", true); err != nil {
 		t.Fatalf("reset password: %v", err)
@@ -519,7 +595,7 @@ func TestLoginResponseMarksExpiredPassword(t *testing.T) {
 	})
 	tokenRepo := &testTokenRepo{}
 	authHistoryRepo := &testAuthHistoryRepo{}
-	authUC := NewAuthUsecase(userRepo, tokenRepo, newTestClientRepo(), newTestLoginChannelRepo(), nil, authHistoryRepo, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, tokenRepo, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, authHistoryRepo, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	resp, err := authUC.Login(&LoginRequest{
 		Username:  "expired.user",
@@ -548,7 +624,7 @@ func TestLoginUpgradesLegacyBcryptHashToArgon2(t *testing.T) {
 		PasswordHistory: []string{legacyHash},
 		Status:          "active",
 	})
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	if _, err := authUC.Login(&LoginRequest{
 		Username:  "legacy.user",
@@ -579,7 +655,7 @@ func TestLoginRequiresEmailOTPForUntrustedDevice(t *testing.T) {
 		Email:           "otp@example.com",
 		PasswordHistory: []string{passwordHash},
 	})
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	_, err := authUC.Login(&LoginRequest{
 		Username:          "otp.user",
@@ -611,7 +687,7 @@ func TestStepUpAcceptsPersistedEmailOTP(t *testing.T) {
 		EmailOTPExpiresAt: &expiry,
 		Status:            "active",
 	})
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	resp, err := authUC.StepUp(32, "session-1", "web_portal", "StepUpPass@123", "123456")
 	if err != nil {
@@ -627,7 +703,7 @@ func TestStepUpAcceptsPersistedEmailOTP(t *testing.T) {
 
 func TestLoginRateLimitBlocksRepeatedFailures(t *testing.T) {
 	userRepo := newtestUserRepo()
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 	identityKey := ratelimit.Normalize("login_identity", "127.0.0.1", "rate.user")
 	ipKey := ratelimit.Normalize("login_ip", "127.0.0.1")
 	loginIdentityLimiter.Reset(identityKey)
@@ -664,7 +740,7 @@ func TestAuthorizeCodeAndPKCEExchange(t *testing.T) {
 		PasswordHistory: []string{passwordHash},
 		Status:          "active",
 	})
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", 15*time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", 15*time.Minute, time.Hour))
 
 	resp, err := authUC.AuthorizeCode(&AuthorizeCodeRequest{
 		Username:            "pkce.user",
@@ -737,7 +813,7 @@ func TestCompleteSSOProvisionsUserAndReturnsSession(t *testing.T) {
 
 	userRepo := newtestUserRepo()
 	tokenRepo := &testTokenRepo{}
-	authUC := NewAuthUsecase(userRepo, tokenRepo, newTestClientRepo(), newTestLoginChannelRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", 15*time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, tokenRepo, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", 15*time.Minute, time.Hour))
 
 	resp, err := authUC.CompleteSSO("google", "provider-code-1", state, &CompleteSSORequest{
 		ClientID:          "web_portal",
@@ -770,7 +846,7 @@ func TestCompleteSSOProvisionsUserAndReturnsSession(t *testing.T) {
 }
 
 func TestListSSOProvidersPrefersRepository(t *testing.T) {
-	authUC := NewAuthUsecase(newtestUserRepo(), &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour), newTestSSOProviderRepo())
+	authUC := NewAuthUsecase(newtestUserRepo(), &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour), newTestSSOProviderRepo())
 
 	providers := authUC.ListSSOProviders()
 	if len(providers) != 1 {
@@ -791,7 +867,7 @@ func TestLoginRequiresOTPWhenChannelPolicyRequiresMFA(t *testing.T) {
 		Status:          "active",
 		Email:           "crm.user@example.com",
 	})
-	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), newTestSecurityPolicyRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
 
 	_, err := authUC.Login(&LoginRequest{
 		Username:          "crm.user",
@@ -805,6 +881,45 @@ func TestLoginRequiresOTPWhenChannelPolicyRequiresMFA(t *testing.T) {
 	})
 	if !errors.Is(err, ErrOTPRequired) {
 		t.Fatalf("expected channel MFA to require OTP, got %v", err)
+	}
+}
+
+func TestLoginRequiresOTPWhenSecurityPolicyRequiresMFA(t *testing.T) {
+	passwordHash := hashForTest(t, "PolicyPass@123")
+	userRepo := newtestUserRepo(&domain.User{
+		ID:              91,
+		Username:        "policy.user",
+		PasswordHash:    passwordHash,
+		PasswordHistory: []string{passwordHash},
+		Status:          "active",
+		Email:           "policy.user@example.com",
+	})
+	policyRepo := newTestSecurityPolicyRepo()
+	policyRepo.items = append(policyRepo.items, &domain.SecurityPolicy{
+		ID:            3,
+		Code:          "web-policy-mfa",
+		Name:          "Web Policy MFA",
+		PolicyType:    "auth",
+		ScopeType:     "client_channel",
+		TargetClient:  "web_portal",
+		TargetChannel: "web",
+		Priority:      50,
+		Active:        true,
+		ConfigJSON:    `{"require_mfa":true}`,
+	})
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), newTestLoginChannelRepo(), policyRepo, nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", time.Minute, time.Hour))
+
+	_, err := authUC.Login(&LoginRequest{
+		Username:          "policy.user",
+		Password:          "PolicyPass@123",
+		ClientID:          "web_portal",
+		Channel:           "web",
+		DeviceFingerprint: "policy-device",
+		IPAddress:         "127.0.0.1",
+		UserAgent:         "go test",
+	})
+	if !errors.Is(err, ErrOTPRequired) {
+		t.Fatalf("expected security policy MFA to require OTP, got %v", err)
 	}
 }
 

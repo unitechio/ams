@@ -100,6 +100,12 @@ const (
 	PermissionChannelCreate Permission = "channel.create"
 	PermissionChannelUpdate Permission = "channel.update"
 	PermissionChannelDelete Permission = "channel.delete"
+
+	// ── Security Policy Management
+	PermissionPolicyRead   Permission = "policy.read"
+	PermissionPolicyCreate Permission = "policy.create"
+	PermissionPolicyUpdate Permission = "policy.update"
+	PermissionPolicyDelete Permission = "policy.delete"
 )
 
 // ─── Permission Group Registry ────────────────────────────────────────────────
@@ -164,6 +170,11 @@ var Registry = []PermissionGroup{
 		Name:        "channel",
 		Description: "Quản lý login channel, risk level và channel policy",
 		Permissions: []Permission{PermissionChannelRead, PermissionChannelCreate, PermissionChannelUpdate, PermissionChannelDelete},
+	},
+	{
+		Name:        "policy",
+		Description: "Quản lý auth/security policy theo global, client và channel",
+		Permissions: []Permission{PermissionPolicyRead, PermissionPolicyCreate, PermissionPolicyUpdate, PermissionPolicyDelete},
 	},
 }
 

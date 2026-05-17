@@ -26,6 +26,7 @@ func Setup(
 	clientH *ClientHandler,
 	ssoProviderH *SSOProviderHandler,
 	loginChannelH *LoginChannelHandler,
+	securityPolicyH *SecurityPolicyHandler,
 	roleH *RoleHandler,
 	permH *PermissionHandler,
 	menuH *MenuHandler,
@@ -281,6 +282,27 @@ func Setup(
 				middleware.RequirePermission(permission.PermissionChannelDelete),
 				middleware.RequireStepUp(jwtSvc),
 				loginChannelH.Delete,
+			)
+		}
+
+		securityPolicies := auth.Group("/security-policies")
+		securityPolicies.Use(middleware.RequirePermission(permission.PermissionPolicyRead))
+		{
+			securityPolicies.GET("", securityPolicyH.List)
+			securityPolicies.POST("",
+				middleware.RequirePermission(permission.PermissionPolicyCreate),
+				middleware.RequireStepUp(jwtSvc),
+				securityPolicyH.Create,
+			)
+			securityPolicies.PUT("/:id",
+				middleware.RequirePermission(permission.PermissionPolicyUpdate),
+				middleware.RequireStepUp(jwtSvc),
+				securityPolicyH.Update,
+			)
+			securityPolicies.DELETE("/:id",
+				middleware.RequirePermission(permission.PermissionPolicyDelete),
+				middleware.RequireStepUp(jwtSvc),
+				securityPolicyH.Delete,
 			)
 		}
 

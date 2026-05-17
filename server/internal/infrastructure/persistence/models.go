@@ -200,6 +200,24 @@ type GormLoginChannel struct {
 
 func (GormLoginChannel) TableName() string { return "sys_login_channels" }
 
+type GormSecurityPolicy struct {
+	ID            uint   `gorm:"primaryKey;autoIncrement"`
+	Code          string `gorm:"uniqueIndex;size:150;not null"`
+	Name          string `gorm:"size:200;not null"`
+	Description   string `gorm:"size:600;default:''"`
+	PolicyType    string `gorm:"size:50;not null;default:'auth'"`
+	ScopeType     string `gorm:"size:50;not null;default:'global'"`
+	TargetClient  string `gorm:"size:150;default:''"`
+	TargetChannel string `gorm:"size:100;default:''"`
+	Priority      int    `gorm:"default:100"`
+	Active        bool   `gorm:"default:true"`
+	ConfigJSON    string `gorm:"type:text;default:'{}'"`
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+func (GormSecurityPolicy) TableName() string { return "sys_security_policies" }
+
 type GormAuditLog struct {
 	ID         uint   `gorm:"primaryKey;autoIncrement"`
 	UserID     uint   `gorm:"index"`

@@ -67,6 +67,11 @@ export const PERMISSIONS = {
   CHANNEL_UPDATE: 'channel.update' as const,
   CHANNEL_DELETE: 'channel.delete' as const,
 
+  POLICY_READ: 'policy.read' as const,
+  POLICY_CREATE: 'policy.create' as const,
+  POLICY_UPDATE: 'policy.update' as const,
+  POLICY_DELETE: 'policy.delete' as const,
+
   // ── Wildcard (Super Admin bypass)
   WILDCARD: '*' as const,
 } as const;
@@ -135,6 +140,10 @@ export const PERMISSION_GROUPS: { name: string; label: string; permissions: Perm
     name: 'channel', label: 'Login Channel',
     permissions: [PERMISSIONS.CHANNEL_READ, PERMISSIONS.CHANNEL_CREATE, PERMISSIONS.CHANNEL_UPDATE, PERMISSIONS.CHANNEL_DELETE],
   },
+  {
+    name: 'policy', label: 'Security Policy',
+    permissions: [PERMISSIONS.POLICY_READ, PERMISSIONS.POLICY_CREATE, PERMISSIONS.POLICY_UPDATE, PERMISSIONS.POLICY_DELETE],
+  },
 ];
 
 // Permission display names
@@ -178,5 +187,9 @@ export const PERMISSION_LABELS: Record<string, string> = {
   'channel.create':     'Tạo login channel',
   'channel.update':     'Sửa login channel',
   'channel.delete':     'Xóa login channel',
+  'policy.read':        'Xem security policy',
+  'policy.create':      'Tạo security policy',
+  'policy.update':      'Sửa security policy',
+  'policy.delete':      'Xóa security policy',
   '*':                  'Toàn quyền (Super Admin)',
 };
