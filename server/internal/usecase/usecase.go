@@ -3,6 +3,7 @@ package usecase
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -30,6 +31,10 @@ var (
 		sync.RWMutex
 		m map[string]uint
 	}{m: make(map[string]uint)}
+	mockAuthCodes = struct {
+		sync.RWMutex
+		m map[string]authorizationCode
+	}{m: make(map[string]authorizationCode)}
 	loginIPLimiter       = ratelimit.New(20, 5*time.Minute, 15*time.Minute)
 	loginIdentityLimiter = ratelimit.New(7, 10*time.Minute, 30*time.Minute)
 )
@@ -84,6 +89,31 @@ type ClientTokenResponse struct {
 	Audiences   []string  `json:"audiences"`
 }
 
+type AuthorizeCodeRequest struct {
+	Username            string `json:"username" binding:"required"`
+	Password            string `json:"password" binding:"required"`
+	ClientID            string `json:"client_id" binding:"required"`
+	RedirectURI         string `json:"redirect_uri" binding:"required"`
+	Scope               string `json:"scope"`
+	State               string `json:"state"`
+	CodeChallenge       string `json:"code_challenge"`
+	CodeChallengeMethod string `json:"code_challenge_method"`
+	Channel             string `json:"channel"`
+	DeviceName          string `json:"device_name"`
+	DeviceFingerprint   string `json:"device_fingerprint"`
+	OTPCode             string `json:"otp_code"`
+	TrustDevice         bool   `json:"trust_device"`
+	IPAddress           string `json:"-"`
+	UserAgent           string `json:"-"`
+}
+
+type AuthorizeCodeResponse struct {
+	Code        string    `json:"code"`
+	State       string    `json:"state"`
+	RedirectURI string    `json:"redirect_uri"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
 type DeviceListItem struct {
 	ID         string `json:"id"`
 	UserID     uint   `json:"user_id"`
@@ -136,6 +166,17 @@ type sessionContext struct {
 	UserAgent         string
 	Trusted           bool
 	RotatedFrom       string
+}
+
+type authorizationCode struct {
+	UserID              uint
+	Username            string
+	ClientID            string
+	RedirectURI         string
+	CodeChallenge       string
+	CodeChallengeMethod string
+	Audiences           []string
+	ExpiresAt           time.Time
 }
 
 func NewAuthUsecase(
@@ -344,6 +385,107 @@ func (uc *AuthUsecase) IssueClientToken(clientID, clientSecret, grantType string
 		ExpiresAt:   time.Now().Add(15 * time.Minute),
 		ClientID:    client.ClientID,
 		Audiences:   cloneStrings(client.Audiences),
+	}, nil
+}
+
+func (uc *AuthUsecase) ExchangeAuthorizationCode(clientID, clientSecret, code, redirectURI, codeVerifier string) (*ClientTokenResponse, error) {
+	if uc.clientRepo == nil {
+		return nil, errors.New("client registry chưa sẵn sàng")
+	}
+	client, err := uc.clientRepo.FindByClientID(strings.TrimSpace(clientID))
+	if err != nil || !client.Active {
+		return nil, errors.New("client không tồn tại hoặc đã bị vô hiệu")
+	}
+	if !client.Public && strings.TrimSpace(clientSecret) != client.ClientSecret {
+		return nil, errors.New("client_secret không hợp lệ")
+	}
+	mockAuthCodes.Lock()
+	authCode, ok := mockAuthCodes.m[strings.TrimSpace(code)]
+	if ok {
+		delete(mockAuthCodes.m, strings.TrimSpace(code))
+	}
+	mockAuthCodes.Unlock()
+	if !ok || authCode.ExpiresAt.Before(time.Now()) {
+		return nil, errors.New("authorization code không hợp lệ hoặc đã hết hạn")
+	}
+	if authCode.ClientID != client.ClientID {
+		return nil, errors.New("authorization code không thuộc về client này")
+	}
+	if authCode.RedirectURI != strings.TrimSpace(redirectURI) {
+		return nil, errors.New("redirect_uri không khớp")
+	}
+	if client.PKCERequired || authCode.CodeChallenge != "" {
+		if strings.TrimSpace(codeVerifier) == "" {
+			return nil, errors.New("code_verifier là bắt buộc cho PKCE")
+		}
+		if !verifyPKCE(authCode.CodeChallenge, authCode.CodeChallengeMethod, codeVerifier) {
+			return nil, errors.New("code_verifier không hợp lệ")
+		}
+	}
+	token, err := uc.jwt.GenerateAccessToken(authCode.UserID, authCode.Username, []string{"user"}, generateOpaqueID(12), client.ClientID, cloneStrings(authCode.Audiences))
+	if err != nil {
+		return nil, err
+	}
+	return &ClientTokenResponse{
+		AccessToken: token,
+		TokenType:   "Bearer",
+		ExpiresAt:   time.Now().Add(15 * time.Minute),
+		ClientID:    client.ClientID,
+		Audiences:   cloneStrings(authCode.Audiences),
+	}, nil
+}
+
+func (uc *AuthUsecase) AuthorizeCode(req *AuthorizeCodeRequest) (*AuthorizeCodeResponse, error) {
+	loginResp, err := uc.Login(&LoginRequest{
+		Username:          req.Username,
+		Password:          req.Password,
+		ClientID:          req.ClientID,
+		GrantType:         "authorization_code",
+		Channel:           req.Channel,
+		DeviceName:        req.DeviceName,
+		DeviceFingerprint: req.DeviceFingerprint,
+		OTPCode:           req.OTPCode,
+		TrustDevice:       req.TrustDevice,
+		IPAddress:         req.IPAddress,
+		UserAgent:         req.UserAgent,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if uc.clientRepo == nil {
+		return nil, errors.New("client registry chưa sẵn sàng")
+	}
+	client, err := uc.clientRepo.FindByClientID(strings.TrimSpace(req.ClientID))
+	if err != nil || !client.Active {
+		return nil, errors.New("client không tồn tại hoặc đã bị vô hiệu")
+	}
+	redirectURI := strings.TrimSpace(req.RedirectURI)
+	if !containsOrEmpty(client.RedirectURIs, redirectURI) {
+		return nil, errors.New("redirect_uri không nằm trong whitelist của client")
+	}
+	if client.PKCERequired && strings.TrimSpace(req.CodeChallenge) == "" {
+		return nil, errors.New("code_challenge là bắt buộc cho client này")
+	}
+	code := generateOpaqueID(24)
+	userInfo := loginResp.User
+	entry := authorizationCode{
+		UserID:              userInfo.ID,
+		Username:            userInfo.Username,
+		ClientID:            client.ClientID,
+		RedirectURI:         redirectURI,
+		CodeChallenge:       strings.TrimSpace(req.CodeChallenge),
+		CodeChallengeMethod: strings.TrimSpace(req.CodeChallengeMethod),
+		Audiences:           cloneStrings(client.Audiences),
+		ExpiresAt:           time.Now().Add(5 * time.Minute),
+	}
+	mockAuthCodes.Lock()
+	mockAuthCodes.m[code] = entry
+	mockAuthCodes.Unlock()
+	return &AuthorizeCodeResponse{
+		Code:        code,
+		State:       req.State,
+		RedirectURI: redirectURI,
+		ExpiresAt:   entry.ExpiresAt,
 	}, nil
 }
 
@@ -1559,6 +1701,22 @@ func generateNumericCode() string {
 func hashOneTimeCode(code string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(code)))
 	return hex.EncodeToString(sum[:])
+}
+
+func verifyPKCE(challenge, method, verifier string) bool {
+	if strings.TrimSpace(challenge) == "" {
+		return false
+	}
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case "", "PLAIN":
+		return challenge == verifier
+	case "S256":
+		sum := sha256.Sum256([]byte(verifier))
+		encoded := base64.RawURLEncoding.EncodeToString(sum[:])
+		return encoded == challenge
+	default:
+		return false
+	}
 }
 
 func verifyOneTimeCode(storedHash string, expiresAt *time.Time, code string) bool {

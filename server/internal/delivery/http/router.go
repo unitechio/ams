@@ -53,6 +53,7 @@ func Setup(
 	public := api.Group("/auth")
 	{
 		public.POST("/login", authH.Login)
+		public.POST("/authorize", authH.Authorize)
 		public.POST("/token", authH.Token)
 		public.POST("/refresh", authH.Refresh)
 		public.POST("/forgot-password", authH.ForgotPassword)

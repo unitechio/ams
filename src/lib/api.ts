@@ -227,6 +227,13 @@ export interface SSOProvider {
   type: string;
 }
 
+export interface AuthorizeCodeResponse {
+  code: string;
+  state: string;
+  redirect_uri: string;
+  expires_at: string;
+}
+
 export interface DeviceSession {
   id: string;
   user_id: number;
@@ -310,6 +317,31 @@ export const authApi = {
     authRequest<SSOProvider[]>('GET', '/auth/sso/providers'),
   startSSO: (provider: string) =>
     authRequest<{ redirect_url: string }>('GET', `/auth/sso/${provider}/start`),
+  authorize: (payload: {
+    username: string;
+    password: string;
+    client_id: string;
+    redirect_uri: string;
+    state?: string;
+    scope?: string;
+    code_challenge?: string;
+    code_challenge_method?: string;
+    channel?: string;
+    device_name?: string;
+    device_fingerprint?: string;
+    otp_code?: string;
+    trust_device?: boolean;
+  }) => authRequest<AuthorizeCodeResponse>('POST', '/auth/authorize', payload),
+  exchangeAuthorizationCode: (payload: {
+    client_id: string;
+    client_secret?: string;
+    code: string;
+    redirect_uri: string;
+    code_verifier: string;
+  }) => authRequest<{ access_token: string; token_type: string; expires_at: string; client_id: string; audiences: string[] }>('POST', '/auth/token', {
+    ...payload,
+    grant_type: 'authorization_code',
+  }),
 };
 
 export const devicesApi = {

@@ -25,11 +25,16 @@ const AuditLogPage = lazy(() => import("@/pages/AuditLogPage"));
 const DevicesPage = lazy(() => import("@/pages/DevicesPage"));
 const AuthClientsPage = lazy(() => import("@/pages/AuthClientsPage"));
 const ServiceAccountsPage = lazy(() => import("@/pages/ServiceAccountsPage"));
+const OAuthCallbackPage = lazy(() => import("@/pages/OAuthCallbackPage"));
 
 export const routes: RouteObject[] = [
   {
     path: "/login",
     element: Loadable(LoginPage)({}),
+  },
+  {
+    path: "/oauth/callback",
+    element: Loadable(OAuthCallbackPage)({}),
   },
   {
     path: "/",

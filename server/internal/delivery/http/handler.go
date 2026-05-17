@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -71,6 +72,26 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	ok(c, resp)
 }
 
+func (h *AuthHandler) Authorize(c *gin.Context) {
+	var req usecase.AuthorizeCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.IPAddress = c.ClientIP()
+	req.UserAgent = c.Request.UserAgent()
+	resp, err := h.uc.AuthorizeCode(&req)
+	if err != nil {
+		status := http.StatusUnauthorized
+		if err == usecase.ErrOTPRequired {
+			status = http.StatusPreconditionRequired
+		}
+		fail(c, status, err.Error())
+		return
+	}
+	ok(c, resp)
+}
+
 func (h *AuthHandler) Refresh(c *gin.Context) {
 	var body struct {
 		RefreshToken string `json:"refresh_token" binding:"required"`
@@ -90,14 +111,28 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 func (h *AuthHandler) Token(c *gin.Context) {
 	var body struct {
 		ClientID     string `json:"client_id" binding:"required"`
-		ClientSecret string `json:"client_secret" binding:"required"`
+		ClientSecret string `json:"client_secret"`
 		GrantType    string `json:"grant_type" binding:"required"`
+		Code         string `json:"code"`
+		RedirectURI  string `json:"redirect_uri"`
+		CodeVerifier string `json:"code_verifier"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
-	resp, err := h.uc.IssueClientToken(body.ClientID, body.ClientSecret, body.GrantType)
+	var (
+		resp interface{}
+		err  error
+	)
+	switch body.GrantType {
+	case "client_credentials":
+		resp, err = h.uc.IssueClientToken(body.ClientID, body.ClientSecret, body.GrantType)
+	case "authorization_code":
+		resp, err = h.uc.ExchangeAuthorizationCode(body.ClientID, body.ClientSecret, body.Code, body.RedirectURI, body.CodeVerifier)
+	default:
+		err = errors.New("grant_type chưa được hỗ trợ")
+	}
 	if err != nil {
 		fail(c, http.StatusUnauthorized, err.Error())
 		return

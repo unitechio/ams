@@ -30,3 +30,24 @@ export const DEFAULT_AUTH_CLIENT = {
   grant_type: 'password',
   channel: 'web',
 };
+
+function randomString(length = 64) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  let out = '';
+  const array = new Uint32Array(length);
+  crypto.getRandomValues(array);
+  for (let i = 0; i < length; i += 1) {
+    out += chars[array[i] % chars.length];
+  }
+  return out;
+}
+
+export async function createPKCEPair() {
+  const verifier = randomString(64);
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+  return { verifier, challenge, method: 'S256' as const };
+}

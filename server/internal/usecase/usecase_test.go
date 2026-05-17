@@ -180,14 +180,16 @@ type testClientRepo struct {
 func newTestClientRepo() *testClientRepo {
 	return &testClientRepo{clients: map[string]*domain.AuthClient{
 		"web_portal": {
-			ID:         1,
-			ClientID:   "web_portal",
-			Name:       "Web Portal",
-			Active:     true,
-			Public:     true,
-			GrantTypes: []string{"password", "refresh_token"},
-			Channels:   []string{"web"},
-			Audiences:  []string{"web-api"},
+			ID:           1,
+			ClientID:     "web_portal",
+			Name:         "Web Portal",
+			Active:       true,
+			Public:       true,
+			PKCERequired: true,
+			GrantTypes:   []string{"password", "refresh_token", "authorization_code"},
+			RedirectURIs: []string{"http://localhost:5173/oauth/callback"},
+			Channels:     []string{"web"},
+			Audiences:    []string{"web-api"},
 		},
 		"payment_service": {
 			ID:           2,
@@ -481,5 +483,44 @@ func TestLoginRateLimitBlocksRepeatedFailures(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "giới hạn") {
 		t.Fatalf("expected rate limit error, got %v", err)
+	}
+}
+
+func TestAuthorizeCodeAndPKCEExchange(t *testing.T) {
+	passwordHash := hashForTest(t, "PkcePass@123")
+	userRepo := newtestUserRepo(&domain.User{
+		ID:              50,
+		Username:        "pkce.user",
+		PasswordHash:    passwordHash,
+		PasswordHistory: []string{passwordHash},
+		Status:          "active",
+	})
+	authUC := NewAuthUsecase(userRepo, &testTokenRepo{}, newTestClientRepo(), nil, &testAuthHistoryRepo{}, jwtpkg.NewService("secret", 15*time.Minute, time.Hour))
+
+	resp, err := authUC.AuthorizeCode(&AuthorizeCodeRequest{
+		Username:            "pkce.user",
+		Password:            "PkcePass@123",
+		ClientID:            "web_portal",
+		RedirectURI:         "http://localhost:5173/oauth/callback",
+		CodeChallenge:       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+		CodeChallengeMethod: "S256",
+		Channel:             "web",
+		DeviceFingerprint:   "pkce-device",
+		IPAddress:           "127.0.0.1",
+		UserAgent:           "go test",
+	})
+	if err != nil {
+		t.Fatalf("authorize code: %v", err)
+	}
+	if resp.Code == "" {
+		t.Fatalf("expected authorization code")
+	}
+
+	tokenResp, err := authUC.ExchangeAuthorizationCode("web_portal", "", resp.Code, "http://localhost:5173/oauth/callback", "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")
+	if err != nil {
+		t.Fatalf("exchange auth code: %v", err)
+	}
+	if tokenResp.AccessToken == "" {
+		t.Fatalf("expected access token")
 	}
 }
