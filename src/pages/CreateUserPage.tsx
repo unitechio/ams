@@ -1,22 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  UserPlus, ArrowLeft, Loader2, ShieldCheck, Save,
+  ArrowLeft, Loader2, ShieldCheck, Save,
   Mail, User as UserIcon, Phone, Lock, Eye, EyeOff,
   UserCheck, ShieldAlert
 } from 'lucide-react';
-import { AdminLayout } from '@/components/layout/AdminLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { clientsApi, loginChannelsApi, usersApi, rolesApi, type ApiRole, type AuthClient, type LoginChannel } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { DatePicker } from '@/components/ui/date-picker';
 import { generateRandomPassword, getPasswordPolicyHint } from '@/lib/password';
+import { UserAccessSecurityPanel } from '@/components/users/UserAccessSecurityPanel';
 
 export default function CreateUserPage() {
   const navigate = useNavigate();
@@ -240,147 +237,26 @@ export default function CreateUserPage() {
 
         {/* Sidebar Config Column */}
         <div className="space-y-6">
-          <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center gap-2 border-b border-slate-50 bg-slate-50/30 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
-                <Lock className="w-4 h-4" />
-              </div>
-              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Chính sách bảo mật</h3>
-            </div>
-
-            <div className="p-6 space-y-6">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Trạng thái khởi tạo</Label>
-                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
-                  <SelectTrigger className="h-10 rounded-lg border-slate-200 focus:ring-emerald-500">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Hoạt động</SelectItem>
-                    <SelectItem value="inactive">Vô hiệu</SelectItem>
-                    <SelectItem value="locked">Bị khóa</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-4 pt-2 border-t border-slate-50">
-                {/* One-time password — core feature, always enabled */}
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label className="text-[13px] font-semibold text-slate-800">Đổi MK lần đầu</Label>
-                    <p className="text-[11px] text-slate-400">
-                      User phải đổi mật khẩu ngay sau lần đăng nhập đầu tiên.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={form.one_time_password}
-                    onCheckedChange={v => setForm(f => ({ ...f, one_time_password: v }))}
-                  />
-                </div>
-
-                {/* Separator + backend-required note */}
-                <div className="pt-2 border-t border-slate-50">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-amber-500 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full">
-                      Yêu cầu cấu hình BE
-                    </span>
-                    <div className="flex-1 h-px bg-slate-100" />
-                  </div>
-
-                  <div className="space-y-4 opacity-80">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label className="text-[13px] font-semibold text-slate-700">Xác thực OTP</Label>
-                        <p className="text-[11px] text-slate-400">
-                          Gửi mã OTP qua email/SMS mỗi phiên (cần cấu hình provider).
-                        </p>
-                      </div>
-                      <Switch
-                        checked={form.require_otp}
-                        onCheckedChange={v => setForm(f => ({ ...f, require_otp: v }))}
-                      />
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label className="text-[13px] font-semibold text-slate-700">Bật 2FA (TOTP)</Label>
-                        <p className="text-[11px] text-slate-400">
-                          Dùng ứng dụng Authenticator. User cần tự setup 2FA sau khi đăng nhập.
-                        </p>
-                      </div>
-                      <Switch
-                        checked={form.two_factor_enabled}
-                        onCheckedChange={v => setForm(f => ({ ...f, two_factor_enabled: v }))}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-slate-50 space-y-1.5">
-                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Hết hạn mật khẩu</Label>
-                <DatePicker
-                  value={form.password_expires_at}
-                  onChange={v => setForm(f => ({ ...f, password_expires_at: v || '' }))}
-                  className="h-10 rounded-lg border-slate-200 focus-visible:ring-emerald-500"
-                />
-              </div>
-
-              <div data-tour="create-user-clients" className="pt-4 border-t border-slate-50 space-y-3">
-                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Client được phép đăng nhập</Label>
-                <div className="grid gap-2">
-                  {clients.map((client) => (
-                    <button
-                      key={client.id}
-                      type="button"
-                      onClick={() => toggleMulti('allowed_clients', client.client_id)}
-                      className={cn(
-                        'rounded-xl border px-3 py-3 text-left transition-all',
-                        form.allowed_clients.includes(client.client_id)
-                          ? 'border-emerald-300 bg-emerald-50'
-                          : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40',
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-800">{client.name || client.client_id}</div>
-                          <div className="text-[11px] text-slate-400">{client.client_id} • {client.app_type}</div>
-                        </div>
-                        <div className={cn('h-4 w-4 rounded-full border', form.allowed_clients.includes(client.client_id) ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300')} />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div data-tour="create-user-channels" className="pt-4 border-t border-slate-50 space-y-3">
-                <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Kênh đăng nhập</Label>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {channels.map((channel) => (
-                    <button
-                      key={channel.id}
-                      type="button"
-                      onClick={() => toggleMulti('allowed_channels', channel.code)}
-                      className={cn(
-                        'rounded-xl border px-3 py-3 text-left transition-all',
-                        form.allowed_channels.includes(channel.code)
-                          ? 'border-sky-300 bg-sky-50'
-                          : 'border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50/40',
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-800">{channel.name}</div>
-                          <div className="text-[11px] text-slate-400">{channel.code} • risk {channel.risk_level}</div>
-                        </div>
-                        <div className={cn('h-4 w-4 rounded-full border', form.allowed_channels.includes(channel.code) ? 'border-sky-500 bg-sky-500' : 'border-slate-300')} />
-                      </div>
-                    </button>
-                  ))}
-                </div>
+          <UserAccessSecurityPanel
+            title="Chính sách bảo mật"
+            subtitle="Gom các rule auth và access boundary thành panel tabs để thao tác nhanh hơn, đỡ scroll dọc."
+            form={form}
+            clients={clients}
+            channels={channels}
+            onStatusChange={(value) => setForm((prev) => ({ ...prev, status: value }))}
+            onToggleSwitch={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
+            onPasswordExpiryChange={(value) => setForm((prev) => ({ ...prev, password_expires_at: value }))}
+            onToggleMulti={toggleMulti}
+          >
+            <div className="rounded-xl border border-amber-100 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <div className="flex gap-3">
+                <ShieldAlert className="w-5 h-5 shrink-0 text-amber-500" />
+                <p className="text-[11px] italic leading-relaxed text-amber-700 dark:text-amber-300">
+                  Tài khoản sau khi tạo sẽ nhận được mật khẩu mặc định. Hãy đảm bảo gửi thông tin đăng nhập cho người dùng qua kênh an toàn.
+                </p>
               </div>
             </div>
-          </div>
+          </UserAccessSecurityPanel>
 
           <Button
             data-tour="create-user-save"
@@ -392,12 +268,6 @@ export default function CreateUserPage() {
             Lưu & Khởi tạo
           </Button>
 
-          <div className="bg-amber-50 rounded-xl p-4 border border-amber-100 flex gap-3">
-            <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0" />
-            <p className="text-[11px] text-amber-700 leading-relaxed italic">
-              Tài khoản sau khi tạo sẽ nhận được mật khẩu mặc định. Hãy đảm bảo gửi thông tin đăng nhập cho người dùng qua kênh an toàn.
-            </p>
-          </div>
         </div>
       </div>
     </div>

@@ -49,6 +49,70 @@ const operationsChecklist = [
   'Khi thay đổi SSO provider, luôn verify redirect_uri, authorize_url, token_url và userinfo mapping.',
 ];
 
+const securityConfigGuides = [
+  {
+    title: 'User Security & Access Boundary',
+    route: '/users',
+    summary: 'Dùng để quyết định user đăng nhập ở đâu, với tầng xác thực nào và trong bối cảnh nào.',
+    fields: [
+      '`one_time_password`: dùng cho mật khẩu tạm, buộc đổi ngay sau login đầu tiên.',
+      '`require_otp`: ép OTP theo phiên khi account chưa đủ an toàn chỉ với password.',
+      '`two_factor_enabled`: bật TOTP cho tài khoản nhạy cảm hoặc tài khoản quản trị.',
+      '`password_expires_at`: dùng cho account cần vòng đời mật khẩu hữu hạn.',
+      '`allowed_clients`: giới hạn app boundary như web, crm, mobile hay partner.',
+      '`allowed_channels`: giới hạn bề mặt truy cập như web/mobile/kiosk/API.',
+    ],
+  },
+  {
+    title: 'Security Policy Runtime',
+    route: '/security-policies',
+    summary: 'Đây là lớp runtime trung tâm để auth server quyết định cách đăng nhập, TTL, rate limit và step-up.',
+    fields: [
+      '`policy_type`: tách nhóm rule như auth, password hoặc step_up.',
+      '`scope_type`: quyết định policy áp global, theo client, theo channel hay kết hợp cả hai.',
+      '`target_client` và `target_channel`: dùng khi cần override cho một boundary cụ thể.',
+      '`priority`: policy số nhỏ hơn được resolve trước nếu cùng scope.',
+      '`require_mfa`, `allow_password`, `allow_sso`: bật/tắt cơ chế xác thực ở runtime.',
+      '`session_ttl_minutes`, `refresh_ttl_minutes`, `trusted_device_ttl_hours`: kiểm soát vòng đời session/token/device trust.',
+      '`login_*`: lớp rate limit / brute-force theo IP và theo identity.',
+      '`target_action` + `require_step_up`: chỉ dùng cho action nhạy cảm như reset password, rotate secret, revoke device.',
+    ],
+  },
+  {
+    title: 'OAuth Client Governance',
+    route: '/auth-clients',
+    summary: 'Client đại diện cho application hoặc service đang xin token, không phải là policy.',
+    fields: [
+      '`client_id`: định danh app, nên theo chuẩn tenant.app.env.',
+      '`client_template`: preset để tạo nhanh boundary đúng cho web, mobile, service hoặc partner.',
+      '`public` và `pkce_required`: bắt buộc hiểu đúng khi cấu hình SPA/mobile.',
+      '`grant_types`: flow mà client được phép dùng, không nên bật thừa.',
+      '`audiences`: chống token reuse sai resource server.',
+      '`channels`: map client với bề mặt đăng nhập được phép dùng nó.',
+      '`redirect_uris`: chỉ whitelist callback hợp lệ, tránh open redirect.',
+    ],
+  },
+  {
+    title: 'Login Channel & SSO Provider',
+    route: '/login-channels',
+    summary: 'Channel trả lời user đang đi vào từ đâu; SSO provider trả lời user xác thực qua IdP nào.',
+    fields: [
+      '`risk_level` của channel: phục vụ policy MFA, OTP, trusted device hoặc step-up.',
+      '`allow_password` / `allow_sso`: dùng để đóng hoặc mở phương thức login theo từng channel.',
+      '`require_mfa`: hữu ích cho kiosk, partner hoặc admin portal có rủi ro cao.',
+      'SSO provider cần verify kỹ `issuer`, `authorize_url`, `token_url`, `userinfo_url`, `callback` và `allow_auto_provision`.',
+    ],
+  },
+];
+
+const securityReviewChecklist = [
+  'Tài khoản nội bộ bình thường: dùng password mạnh + one-time password khi cấp mới, chỉ bật OTP/TOTP nếu policy hoặc mức nhạy cảm yêu cầu.',
+  'Tài khoản quản trị: ưu tiên TOTP, hạn chế channel, hạn chế client, và thêm step-up cho action nhạy cảm.',
+  'Mobile/SPA: phải map đúng public client + PKCE, không giữ client secret.',
+  'Service account: chỉ dùng client_credentials, không cần redirect URI, không được gắn login channel kiểu human.',
+  'Khi gặp lỗi login: debug theo thứ tự client -> channel -> policy -> user boundary -> MFA/step-up -> session/token.',
+];
+
 const authFlow = `User/App -> /auth/login hoặc /auth/authorize
   -> Validate client + channel + policy
   -> Password / SSO / OTP / TOTP
@@ -136,6 +200,7 @@ export default function DocsPage() {
               <TabsList data-tour="docs-tabs" className="h-auto flex-wrap justify-start rounded-2xl bg-slate-100 p-1.5 dark:bg-slate-800">
                 <TabsTrigger value="overview">Tổng quan</TabsTrigger>
                 <TabsTrigger value="ops">Vận hành</TabsTrigger>
+                <TabsTrigger value="security-config">Security Config</TabsTrigger>
                 <TabsTrigger value="backend">Go Backend</TabsTrigger>
                 <TabsTrigger value="frontend">React Frontend</TabsTrigger>
                 <TabsTrigger value="auth">Auth Flow</TabsTrigger>
@@ -166,6 +231,46 @@ export default function DocsPage() {
                   <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
                     {operationsChecklist.map((item) => (
                       <div key={item} className="rounded-xl border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </AdminCard>
+              </TabsContent>
+
+              <TabsContent value="security-config" className="space-y-4">
+                <SectionTitle icon={Shield} title="Hướng Dẫn Security Config" />
+                <div className="grid gap-4">
+                  {securityConfigGuides.map((guide) => (
+                    <AdminCard key={guide.title} className="p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{guide.title}</p>
+                          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{guide.summary}</p>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => navigate(guide.route)}>
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Mở màn hình
+                        </Button>
+                      </div>
+                      <div className="mt-4 grid gap-2">
+                        {guide.fields.map((field) => (
+                          <div key={field} className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
+                            {field}
+                          </div>
+                        ))}
+                      </div>
+                    </AdminCard>
+                  ))}
+                </div>
+                <AdminCard className="p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-emerald-500" />
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">Checklist review nhanh</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {securityReviewChecklist.map((item) => (
+                      <div key={item} className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
                         {item}
                       </div>
                     ))}
