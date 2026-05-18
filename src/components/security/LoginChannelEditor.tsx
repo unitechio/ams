@@ -117,6 +117,9 @@ export function LoginChannelEditor({ channelId }: { channelId?: number }) {
         subtitle="Editor riêng cho policy theo bề mặt đăng nhập: MFA, risk level, session TTL và trusted-device."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" onClick={() => navigate('/docs?tab=security-config&section=login-channel-runtime')}>
+              Xem docs
+            </Button>
             <Button variant="outline" onClick={() => navigate('/login-channels')}><ArrowLeft className="mr-2 h-4 w-4" />Quay lại</Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}

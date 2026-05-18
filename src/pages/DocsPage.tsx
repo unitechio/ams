@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BookOpenText, Boxes, Compass, Database, ExternalLink, GitBranch, PlayCircle, Rocket, ScrollText, ServerCog, Shield, Sparkles, Workflow } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { driver } from 'driver.js';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { AdminCard } from '@/components/layout/AdminShell';
@@ -51,6 +51,7 @@ const operationsChecklist = [
 
 const securityConfigGuides = [
   {
+    id: 'user-security-access-boundary',
     title: 'User Security & Access Boundary',
     route: '/users',
     summary: 'Dùng để quyết định user đăng nhập ở đâu, với tầng xác thực nào và trong bối cảnh nào.',
@@ -64,6 +65,7 @@ const securityConfigGuides = [
     ],
   },
   {
+    id: 'security-policy-runtime-core',
     title: 'Security Policy Runtime',
     route: '/security-policies',
     summary: 'Đây là lớp runtime trung tâm để auth server quyết định cách đăng nhập, TTL, rate limit và step-up.',
@@ -79,6 +81,7 @@ const securityConfigGuides = [
     ],
   },
   {
+    id: 'oauth-client-governance',
     title: 'OAuth Client Governance',
     route: '/auth-clients',
     summary: 'Client đại diện cho application hoặc service đang xin token, không phải là policy.',
@@ -93,6 +96,7 @@ const securityConfigGuides = [
     ],
   },
   {
+    id: 'service-account',
     title: 'Service Account',
     route: '/service-accounts',
     summary: 'Service account là machine-to-machine client, không phải user login thông thường.',
@@ -105,6 +109,21 @@ const securityConfigGuides = [
     ],
   },
   {
+    id: 'reference-options',
+    title: 'Reference Options Catalog',
+    route: '/reference-options',
+    summary: 'Catalog DB-backed cho dropdown, template metadata và option mở rộng mà UI/runtime cùng dùng.',
+    fields: [
+      '`option_group`: nhóm logic như policy_type, client_template, channel_risk_level hoặc step_up_action.',
+      '`value`: giá trị kỹ thuật ổn định dùng trong DB và runtime; không nên đổi bừa nếu đã có dữ liệu sống.',
+      '`label`: text hiển thị cho admin trong select/table mà không ảnh hưởng logic runtime.',
+      '`sort_order`: thứ tự render option trong dropdown hoặc danh sách.',
+      '`meta_json`: metadata mở rộng cho template phức tạp, ví dụ grant mặc định, app_type hoặc channel mặc định.',
+      '`active`: ẩn option khỏi UI query active mà không cần xóa cứng dữ liệu lịch sử.',
+    ],
+  },
+  {
+    id: 'login-channel-runtime',
     title: 'Login Channel Runtime',
     route: '/login-channels',
     summary: 'Login channel mô tả bề mặt truy cập và risk boundary, không thay thế cho OAuth client.',
@@ -117,6 +136,7 @@ const securityConfigGuides = [
     ],
   },
   {
+    id: 'sso-provider-registry',
     title: 'SSO Provider Registry',
     route: '/sso-providers',
     summary: 'SSO provider quyết định hệ thống sẽ federation với IdP nào và callback ra sao.',
@@ -130,6 +150,7 @@ const securityConfigGuides = [
     ],
   },
   {
+    id: 'security-policy-runtime-detailed',
     title: 'Security Policy Runtime',
     route: '/security-policies',
     summary: 'Policy là lớp runtime quyết định auth/session/rate-limit/step-up theo scope cụ thể.',
@@ -179,7 +200,26 @@ Storage
 
 export default function DocsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tab, setTab] = useState('overview');
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam) {
+      setTab(tabParam);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const section = searchParams.get('section');
+    const tabParam = searchParams.get('tab');
+    if (!section || !tabParam || tab !== tabParam) return;
+    const timer = window.setTimeout(() => {
+      const element = document.getElementById(section);
+      element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+    return () => window.clearTimeout(timer);
+  }, [searchParams, tab]);
 
   const startTour = (kind: 'overview' | 'operations') => {
     const tour = driver({
@@ -282,7 +322,7 @@ export default function DocsPage() {
                 <SectionTitle icon={Shield} title="Hướng Dẫn Security Config" />
                 <div className="grid gap-4">
                   {securityConfigGuides.map((guide) => (
-                    <AdminCard key={guide.title} className="p-5">
+                    <AdminCard key={guide.id} id={guide.id} className="p-5 scroll-mt-24">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{guide.title}</p>

@@ -279,6 +279,9 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
           : 'Biểu mẫu đầy đủ cho client application với redirect URI, channel, audience và secret lifecycle.'}
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" onClick={() => navigate(`/docs?tab=security-config&section=${isServiceMode ? 'service-account' : 'oauth-client-governance'}`)}>
+              Xem docs
+            </Button>
             <Button variant="outline" onClick={() => navigate(backPath)}><ArrowLeft className="mr-2 h-4 w-4" />Quay lại</Button>
             <Button data-tour={!isServiceMode ? 'auth-client-save' : undefined} onClick={handleSave} disabled={saving || (!isServiceMode && form.channels.length === 0)}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}

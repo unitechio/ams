@@ -106,6 +106,9 @@ export function ReferenceOptionEditor({ optionId }: { optionId?: number }) {
         subtitle="Quản trị catalog DB-backed cho các dropdown runtime và template mở rộng."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" onClick={() => navigate('/docs?tab=security-config&section=reference-options')}>
+              Xem docs
+            </Button>
             <Button variant="outline" onClick={() => navigate('/reference-options')}><ArrowLeft className="mr-2 h-4 w-4" />Quay lại</Button>
             <Button onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
