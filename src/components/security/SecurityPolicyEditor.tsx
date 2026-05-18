@@ -323,26 +323,6 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
               </div>
             </AdminFormNote>
 
-            <AdminFormNote>
-              <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
-                <p className="font-semibold text-slate-900 dark:text-slate-100">Giải thích nhanh các field quan trọng</p>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">Policy Type:</span> `auth` cho runtime đăng nhập, `password` cho rule mật khẩu, `step_up` cho action nhạy cảm.
-                </div>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">Scope Type:</span> `global` là mặc định toàn hệ thống, `client` hoặc `channel` dùng để override hẹp hơn, `client_channel` là mức chi tiết nhất.
-                </div>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">Priority:</span> số nhỏ hơn được ưu tiên resolve trước khi nhiều policy cùng match.
-                </div>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">TTL fields:</span> quyết định thời gian sống của trusted device, session, refresh token và step-up verification.
-                </div>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">Login attempts/window/block:</span> lớp chống brute-force theo IP và identity, nên tăng dần theo mức rủi ro của client/channel.
-                </div>
-              </div>
-            </AdminFormNote>
           </div>
         </div>
       </AdminFormSurface>

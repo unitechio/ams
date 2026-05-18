@@ -191,26 +191,6 @@ export function LoginChannelEditor({ channelId }: { channelId?: number }) {
               </div>
             </AdminFormNote>
 
-            <AdminFormNote>
-              <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
-                <p className="font-semibold text-slate-900 dark:text-slate-100">Field guide</p>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">Code:</span> định danh bề mặt truy cập như `web`, `mobile`, `crm`, `kiosk`, `partner`, `service`.
-                </div>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">Risk Level:</span> nhãn rủi ro để policy và vận hành hiểu channel này cần kiểm soát chặt đến đâu.
-                </div>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">Require MFA:</span> ép lớp xác thực mạnh hơn ngay tại channel, hữu ích cho admin portal hoặc partner portal.
-                </div>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">Allow password / Allow SSO:</span> quyết định channel này được phép dùng local credential, SSO hay cả hai.
-                </div>
-                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
-                  <span className="font-medium">Trusted Device TTL / Session TTL:</span> vòng đời trust và session mặc định của channel trước khi bị policy runtime override.
-                </div>
-              </div>
-            </AdminFormNote>
           </div>
         </div>
       </AdminFormSurface>
