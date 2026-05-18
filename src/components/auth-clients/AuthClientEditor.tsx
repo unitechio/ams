@@ -280,7 +280,7 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" onClick={() => navigate(backPath)}><ArrowLeft className="mr-2 h-4 w-4" />Quay lại</Button>
-            <Button onClick={handleSave} disabled={saving || (!isServiceMode && form.channels.length === 0)}>
+            <Button data-tour={!isServiceMode ? 'auth-client-save' : undefined} onClick={handleSave} disabled={saving || (!isServiceMode && form.channels.length === 0)}>
               {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Lưu
             </Button>
@@ -291,7 +291,7 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
       <AdminFormSurface className="from-white via-emerald-50/40 to-teal-50/30">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-6">
-            <AdminFormSection title="Định danh Client" description="Thông tin nhận diện chính của application hoặc service đang xin token.">
+            <AdminFormSection data-tour={!isServiceMode ? 'auth-client-identity' : undefined} title="Định danh Client" description="Thông tin nhận diện chính của application hoặc service đang xin token.">
               <div>
                 <Label>Client Template</Label>
                 <Select value={form.client_template} onValueChange={applyTemplate}>
@@ -349,7 +349,7 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
               <div className="md:col-span-2"><Label>Mô tả</Label><Input value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} /></div>
             </AdminFormSection>
 
-            <AdminFormSection title="Token & Security" description="Điều khiển grant type, audience, redirect URI và trusted type.">
+            <AdminFormSection data-tour={!isServiceMode ? 'auth-client-token' : undefined} title="Token & Security" description="Điều khiển grant type, audience, redirect URI và trusted type.">
               <div><Label>Grant Types</Label><Input value={form.grant_types} disabled={isServiceMode} onChange={(e) => setForm(f => ({ ...f, grant_types: e.target.value }))} placeholder="authorization_code,refresh_token" /></div>
               <div><Label>Audiences</Label><Input value={form.audiences} onChange={(e) => setForm(f => ({ ...f, audiences: e.target.value }))} placeholder="payment-api,parking-api" /></div>
               {!isServiceMode && <div><Label>Redirect URIs</Label><Input value={form.redirect_uris} onChange={(e) => setForm(f => ({ ...f, redirect_uris: e.target.value }))} placeholder="https://app/callback,myapp://oauth/callback" /></div>}
@@ -360,7 +360,7 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
           </div>
 
           <div className="space-y-6">
-            <AdminFormSection title="Channel Mapping" description="Kênh đăng nhập được phép dùng client này.">
+            <AdminFormSection data-tour={!isServiceMode ? 'auth-client-channels' : undefined} title="Channel Mapping" description="Kênh đăng nhập được phép dùng client này.">
               {isServiceMode ? (
                 <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                   Service account cố định channel `service`.
@@ -382,7 +382,7 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
               )}
             </AdminFormSection>
 
-            <AdminFormSection title="Boundary" description="Public/confidential boundary và các cờ bảo mật liên quan.">
+            <AdminFormSection data-tour={!isServiceMode ? 'auth-client-boundary' : undefined} title="Boundary" description="Public/confidential boundary và các cờ bảo mật liên quan.">
               <div className="md:col-span-2 grid grid-cols-1 gap-3 text-sm">
                 {!isServiceMode && (
                   <>

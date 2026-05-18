@@ -94,7 +94,7 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={fetchData}><RefreshCcw className="mr-2 h-4 w-4" />Làm mới</Button>
             <Guard permission={isServiceMode ? PERMISSIONS.SERVICE_CREATE : PERMISSIONS.CLIENT_CREATE}>
-              <Button onClick={() => navigate(createPath)}><Plus className="mr-2 h-4 w-4" />Thêm mới</Button>
+              <Button data-tour={isServiceMode ? undefined : 'auth-clients-create-button'} onClick={() => navigate(createPath)}><Plus className="mr-2 h-4 w-4" />Thêm mới</Button>
             </Guard>
           </div>
         }

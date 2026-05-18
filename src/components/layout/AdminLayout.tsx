@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { authApi, type ApiMenu } from '@/lib/api';
 import { getVisibleNavItems, buildPermissionMenu, type MenuNode } from '@/menu/menuService';
+import { resumeWorkflowTour, subscribeWorkflowTours } from '@/lib/workflowTours';
 import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 
@@ -23,6 +24,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const [loadingNav, setLoadingNav] = useState(true);
   const { isAuthenticated } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const handleToggle = () => {
     setCollapsed(prev => {
@@ -57,6 +59,19 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       })
       .finally(() => setLoadingNav(false));
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const unsubscribe = subscribeWorkflowTours(() => {
+      resumeWorkflowTour(window.location.pathname, navigate);
+    });
+    return unsubscribe;
+  }, [isAuthenticated, navigate]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    resumeWorkflowTour(location.pathname, navigate);
+  }, [isAuthenticated, location.pathname, navigate]);
 
   return (
     <div className="flex h-screen w-full bg-slate-50 dark:bg-slate-950 overflow-hidden font-sans text-slate-900 dark:text-slate-100">

@@ -180,6 +180,7 @@ export default function AuditLogPage() {
             <Button
               variant={showFilters ? "secondary" : "outline"}
               onClick={() => setShowFilters(!showFilters)}
+              data-tour="audit-filters-toggle"
               className={cn(
                 "h-10 rounded-xl",
                 showFilters &&
@@ -192,7 +193,7 @@ export default function AuditLogPage() {
         />
 
         {/* Search & Main Actions */}
-        <AdminCard className="p-4 flex flex-wrap items-center justify-between gap-4">
+        <AdminCard data-tour="audit-search" className="p-4 flex flex-wrap items-center justify-between gap-4">
           <AdminSearchField className="w-full sm:w-96 flex-none">
             <Input
               placeholder="Tìm nội dung, tài nguyên, ID..."
@@ -228,7 +229,7 @@ export default function AuditLogPage() {
 
         {/* Advanced Filters Panel */}
         {showFilters && (
-          <div className="bg-white p-6 rounded-xl border border-emerald-100 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+          <div data-tour="audit-filters-panel" className="bg-white p-6 rounded-xl border border-emerald-100 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300 dark:border-emerald-900/40 dark:bg-slate-900">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -290,7 +291,7 @@ export default function AuditLogPage() {
           </div>
         )}
 
-        <AdminCard className="overflow-hidden">
+        <AdminCard data-tour="audit-table" className="overflow-hidden">
           {loading ? (
             <AdminLoadingState className="flex-col gap-4 py-20">
               <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />

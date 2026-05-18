@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { AdminCard } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { startWorkflowTour, workflowTours } from '@/lib/workflowTours';
 
 type DocLink = { label: string; path: string; note: string };
 
@@ -222,6 +223,31 @@ export default function DocsPage() {
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{item.note}</p>
                     </div>
                     <ExternalLink className="h-4 w-4 shrink-0 text-slate-400" />
+                  </div>
+                </button>
+              ))}
+            </div>
+          </AdminCard>
+
+          <AdminCard className="p-5">
+            <div className="mb-4 flex items-center gap-2">
+              <Workflow className="h-4 w-4 text-emerald-500" />
+              <h3 className="font-semibold text-slate-900 dark:text-slate-100">Workflow tours xuyên route</h3>
+            </div>
+            <div className="space-y-3">
+              {workflowTours.map((tour) => (
+                <button
+                  key={tour.id}
+                  type="button"
+                  onClick={() => startWorkflowTour(tour.id, navigate)}
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-emerald-200 hover:bg-emerald-50/40 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-900/60 dark:hover:bg-emerald-950/20"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium text-slate-900 dark:text-slate-100">{tour.label}</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{tour.description}</p>
+                    </div>
+                    <PlayCircle className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
                   </div>
                 </button>
               ))}

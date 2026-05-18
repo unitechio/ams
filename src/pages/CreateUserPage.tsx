@@ -111,7 +111,7 @@ export default function CreateUserPage() {
         <div className="lg:col-span-2 space-y-6">
 
           {/* Basic Info Card */}
-          <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div data-tour="create-user-basic" className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center gap-2 border-b border-slate-50 bg-slate-50/30 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
                 <UserIcon className="w-4 h-4" />
@@ -195,7 +195,7 @@ export default function CreateUserPage() {
           </div>
 
           {/* Roles Selection Card */}
-          <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div data-tour="create-user-roles" className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-center gap-2 border-b border-slate-50 bg-slate-50/30 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400">
                 <ShieldCheck className="w-4 h-4" />
@@ -326,7 +326,7 @@ export default function CreateUserPage() {
                 />
               </div>
 
-              <div className="pt-4 border-t border-slate-50 space-y-3">
+              <div data-tour="create-user-clients" className="pt-4 border-t border-slate-50 space-y-3">
                 <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Client được phép đăng nhập</Label>
                 <div className="grid gap-2">
                   {clients.map((client) => (
@@ -353,7 +353,7 @@ export default function CreateUserPage() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-50 space-y-3">
+              <div data-tour="create-user-channels" className="pt-4 border-t border-slate-50 space-y-3">
                 <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Kênh đăng nhập</Label>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {channels.map((channel) => (
@@ -383,6 +383,7 @@ export default function CreateUserPage() {
           </div>
 
           <Button
+            data-tour="create-user-save"
             onClick={handleSave}
             disabled={saving}
             className="w-full h-11 bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-100 font-bold rounded-lg transition-all active:scale-95"

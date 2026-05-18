@@ -169,6 +169,7 @@ export default function UsersPage() {
             <Guard permission={PERMISSIONS.USER_CREATE}>
               <Button
                 onClick={() => navigate('/users/create')}
+                data-tour="users-create-button"
                 className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm shadow-emerald-100"
               >
                 <Plus className="w-4.5 h-4.5 mr-2" /> Thêm người dùng
