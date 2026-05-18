@@ -6,6 +6,7 @@ import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { AdminFormSection, AdminFormSurface } from '@/components/layout/AdminFormShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
+import { FieldLabelWithHelp } from '@/components/ui/help-tooltip';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { isStepUpRequiredError, referenceOptionsApi } from '@/lib/api';
@@ -116,13 +117,13 @@ export function ReferenceOptionEditor({ optionId }: { optionId?: number }) {
 
       <AdminFormSurface className="from-white via-amber-50/35 to-sky-50/30">
         <AdminFormSection title="Reference Option Detail" description="Quản trị catalog DB-backed cho dropdown runtime, template metadata và option mở rộng trong tương lai.">
-          <div><Label>Option Group</Label><Input value={form.option_group} onChange={(e) => setForm(f => ({ ...f, option_group: e.target.value }))} /></div>
-          <div><Label>Value</Label><Input value={form.value} onChange={(e) => setForm(f => ({ ...f, value: e.target.value }))} /></div>
-          <div><Label>Label</Label><Input value={form.label} onChange={(e) => setForm(f => ({ ...f, label: e.target.value }))} /></div>
-          <div><Label>Sort Order</Label><Input type="number" value={form.sort_order} onChange={(e) => setForm(f => ({ ...f, sort_order: Number(e.target.value || 100) }))} /></div>
-          <div className="md:col-span-2"><Label>Description</Label><Input value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} /></div>
+          <div><Label><FieldLabelWithHelp label="Option Group" helpTitle="Option Group" helpContent="Nhóm logic của option trong hệ thống, ví dụ `policy_type`, `client_template`, `channel_risk_level`. UI và runtime sẽ query theo group này." /></Label><Input value={form.option_group} onChange={(e) => setForm(f => ({ ...f, option_group: e.target.value }))} /></div>
+          <div><Label><FieldLabelWithHelp label="Value" helpTitle="Value" helpContent="Giá trị kỹ thuật được lưu trong DB và gửi xuống runtime/API. Giá trị này nên ổn định để không làm gãy config đang dùng." /></Label><Input value={form.value} onChange={(e) => setForm(f => ({ ...f, value: e.target.value }))} /></div>
+          <div><Label><FieldLabelWithHelp label="Label" helpTitle="Label" helpContent="Tên hiển thị cho người dùng trong dropdown hoặc table. Có thể thay đổi theo UX mà không ảnh hưởng runtime value." /></Label><Input value={form.label} onChange={(e) => setForm(f => ({ ...f, label: e.target.value }))} /></div>
+          <div><Label><FieldLabelWithHelp label="Sort Order" helpTitle="Sort Order" helpContent="Thứ tự hiển thị trong dropdown/list. Số nhỏ hơn sẽ đứng trước." /></Label><Input type="number" value={form.sort_order} onChange={(e) => setForm(f => ({ ...f, sort_order: Number(e.target.value || 100) }))} /></div>
+          <div className="md:col-span-2"><Label><FieldLabelWithHelp label="Description" helpTitle="Description" helpContent="Mô tả ngắn cho admin hoặc dev biết option này được dùng ở đâu và có ý nghĩa gì." /></Label><Input value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} /></div>
           <div className="md:col-span-2">
-            <Label>Meta JSON</Label>
+            <Label><FieldLabelWithHelp label="Meta JSON" helpTitle="Meta JSON" helpContent="Metadata mở rộng cho template hoặc option phức tạp. Dùng để gắn thêm config như grants, app_type, channels mặc định mà không cần đổi schema." /></Label>
             <textarea
               value={form.meta_json}
               onChange={(e) => setForm(f => ({ ...f, meta_json: e.target.value }))}
