@@ -1566,6 +1566,15 @@ func (uc *SSOProviderUsecase) List(filters map[string]interface{}, page, pageSiz
 	return paginate(data, total, page, pageSize), nil
 }
 
+func (uc *SSOProviderUsecase) GetByID(id uint) (*SSOProviderResponse, error) {
+	provider, err := uc.repo.FindByID(id)
+	if err != nil {
+		return nil, errors.New("SSO provider không tồn tại")
+	}
+	resp := ssoProviderToResponse(provider)
+	return &resp, nil
+}
+
 func (uc *SSOProviderUsecase) Create(req *CreateSSOProviderReq) (*SSOProviderResponse, error) {
 	provider := &domain.SSOProvider{
 		ProviderID:         strings.TrimSpace(req.ProviderID),
@@ -1965,6 +1974,25 @@ func (uc *ReferenceOptionUsecase) List(filters map[string]interface{}, page, pag
 		}
 	}
 	return paginate(data, total, page, pageSize), nil
+}
+
+func (uc *ReferenceOptionUsecase) GetByID(id uint) (*ReferenceOptionResponse, error) {
+	item, err := uc.repo.FindByID(id)
+	if err != nil {
+		return nil, errors.New("reference option không tồn tại")
+	}
+	resp := ReferenceOptionResponse{
+		ID:          item.ID,
+		OptionGroup: item.OptionGroup,
+		Value:       item.Value,
+		Label:       item.Label,
+		Description: item.Description,
+		MetaJSON:    item.MetaJSON,
+		SortOrder:   item.SortOrder,
+		Active:      item.Active,
+		CreatedAt:   item.CreatedAt,
+	}
+	return &resp, nil
 }
 
 func (uc *ReferenceOptionUsecase) Create(req *CreateReferenceOptionReq) (*ReferenceOptionResponse, error) {

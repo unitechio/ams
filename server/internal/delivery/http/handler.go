@@ -591,6 +591,19 @@ func (h *SSOProviderHandler) List(c *gin.Context) {
 	ok(c, result)
 }
 
+func (h *SSOProviderHandler) Get(c *gin.Context) {
+	id, valid := parseID(c)
+	if !valid {
+		return
+	}
+	result, err := h.uc.GetByID(id)
+	if err != nil {
+		fail(c, http.StatusNotFound, err.Error())
+		return
+	}
+	ok(c, result)
+}
+
 func (h *SSOProviderHandler) Create(c *gin.Context) {
 	var req usecase.CreateSSOProviderReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -799,6 +812,19 @@ func (h *ReferenceOptionHandler) List(c *gin.Context) {
 	result, err := h.uc.List(filters, page, pageSize)
 	if err != nil {
 		fail(c, http.StatusInternalServerError, err.Error())
+		return
+	}
+	ok(c, result)
+}
+
+func (h *ReferenceOptionHandler) Get(c *gin.Context) {
+	id, valid := parseID(c)
+	if !valid {
+		return
+	}
+	result, err := h.uc.GetByID(id)
+	if err != nil {
+		fail(c, http.StatusNotFound, err.Error())
 		return
 	}
 	ok(c, result)

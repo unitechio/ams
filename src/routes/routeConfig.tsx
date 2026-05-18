@@ -30,11 +30,15 @@ const ServiceAccountsPage = lazy(() => import("@/pages/ServiceAccountsPage"));
 const CreateServiceAccountPage = lazy(() => import("@/pages/CreateServiceAccountPage"));
 const EditServiceAccountPage = lazy(() => import("@/pages/EditServiceAccountPage"));
 const SSOProvidersPage = lazy(() => import("@/pages/SSOProvidersPage"));
+const CreateSSOProviderPage = lazy(() => import("@/pages/CreateSSOProviderPage"));
+const EditSSOProviderPage = lazy(() => import("@/pages/EditSSOProviderPage"));
 const LoginChannelsPage = lazy(() => import("@/pages/LoginChannelsPage"));
 const SecurityPoliciesPage = lazy(() => import("@/pages/SecurityPoliciesPage"));
 const CreateSecurityPolicyPage = lazy(() => import("@/pages/CreateSecurityPolicyPage"));
 const EditSecurityPolicyPage = lazy(() => import("@/pages/EditSecurityPolicyPage"));
 const ReferenceOptionsPage = lazy(() => import("@/pages/ReferenceOptionsPage"));
+const CreateReferenceOptionPage = lazy(() => import("@/pages/CreateReferenceOptionPage"));
+const EditReferenceOptionPage = lazy(() => import("@/pages/EditReferenceOptionPage"));
 const OAuthCallbackPage = lazy(() => import("@/pages/OAuthCallbackPage"));
 const SSOCallbackPage = lazy(() => import("@/pages/SSOCallbackPage"));
 
@@ -201,11 +205,32 @@ export const routes: RouteObject[] = [
       },
       {
         path: "sso-providers",
-        element: (
-          <ProtectedRoute permissions={[PERMISSIONS.CLIENT_READ]}>
-            {Loadable(SSOProvidersPage)({})}
-          </ProtectedRoute>
-        ),
+        children: [
+          {
+            index: true,
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.CLIENT_READ]}>
+                {Loadable(SSOProvidersPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "create",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.CLIENT_CREATE]}>
+                {Loadable(CreateSSOProviderPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: ":id/edit",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.CLIENT_UPDATE]}>
+                {Loadable(EditSSOProviderPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+        ],
       },
       {
         path: "login-channels",
@@ -246,11 +271,32 @@ export const routes: RouteObject[] = [
       },
       {
         path: "reference-options",
-        element: (
-          <ProtectedRoute permissions={[PERMISSIONS.OPTION_READ]}>
-            {Loadable(ReferenceOptionsPage)({})}
-          </ProtectedRoute>
-        ),
+        children: [
+          {
+            index: true,
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.OPTION_READ]}>
+                {Loadable(ReferenceOptionsPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "create",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.OPTION_CREATE]}>
+                {Loadable(CreateReferenceOptionPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: ":id/edit",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.OPTION_UPDATE]}>
+                {Loadable(EditReferenceOptionPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+        ],
       },
       {
         path: "service-accounts",

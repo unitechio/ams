@@ -2,12 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Loader2, Save, ShieldAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { clientsApi, loginChannelsApi, referenceOptionsApi, securityPoliciesApi, type AuthClient, type LoginChannel, type ReferenceOption } from '@/lib/api';
+import { clientsApi, isStepUpRequiredError, loginChannelsApi, referenceOptionsApi, securityPoliciesApi, type AuthClient, type LoginChannel, type ReferenceOption } from '@/lib/api';
 
 const DEFAULT_FORM = {
   code: '',
@@ -63,6 +64,8 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<null | (() => Promise<void>)>(null);
 
   useEffect(() => {
     async function load() {
@@ -128,9 +131,7 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
   const isAuthPolicy = form.policy_type === 'auth';
   const isStepUpPolicy = form.policy_type === 'step_up';
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
+  const submit = async () => {
       const payload = {
         ...form,
         code: form.code.trim(),
@@ -145,7 +146,18 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
         toast.success('Tạo security policy thành công');
       }
       navigate('/security-policies');
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await submit();
     } catch (err) {
+      if (isStepUpRequiredError(err)) {
+        setPendingAction(() => submit);
+        setStepUpOpen(true);
+        return;
+      }
       toast.error(err instanceof Error ? err.message : 'Lưu security policy thất bại');
     } finally {
       setSaving(false);
@@ -158,6 +170,21 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
 
   return (
     <div className="space-y-6">
+      <StepUpDialog
+        open={stepUpOpen}
+        onOpenChange={setStepUpOpen}
+        onVerified={async () => {
+          if (!pendingAction) return;
+          setSaving(true);
+          try {
+            await pendingAction();
+          } finally {
+            setPendingAction(null);
+            setSaving(false);
+          }
+        }}
+        description="Xác thực lại để tạo hoặc cập nhật security policy."
+      />
       <PageHeader
         title={policyId ? 'Cập nhật Security Policy' : 'Tạo Security Policy Mới'}
         subtitle="Chuyển từ dialog lớn sang trang editor riêng để đủ chỗ cho các nhóm rule auth, password, rate limit và step-up."

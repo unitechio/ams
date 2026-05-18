@@ -251,6 +251,7 @@ func Setup(
 		ssoProviders.Use(middleware.RequirePermission(permission.PermissionClientRead))
 		{
 			ssoProviders.GET("", ssoProviderH.List)
+			ssoProviders.GET("/:id", ssoProviderH.Get)
 			ssoProviders.POST("",
 				middleware.RequirePermission(permission.PermissionClientCreate),
 				middleware.RequireStepUp(jwtSvc),
@@ -315,6 +316,7 @@ func Setup(
 		referenceOptions.Use(middleware.RequirePermission(permission.PermissionOptionRead))
 		{
 			referenceOptions.GET("", referenceOptionH.List)
+			referenceOptions.GET("/:id", referenceOptionH.Get)
 			referenceOptions.POST("",
 				middleware.RequirePermission(permission.PermissionOptionCreate),
 				middleware.RequireStepUp(jwtSvc),

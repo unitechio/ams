@@ -369,6 +369,16 @@ func (r *testSSOProviderRepo) FindByProviderID(providerID string) (*domain.SSOPr
 	return &cloned, nil
 }
 
+func (r *testSSOProviderRepo) FindByID(id uint) (*domain.SSOProvider, error) {
+	for _, provider := range r.providers {
+		if provider.ID == id {
+			cloned := *provider
+			return &cloned, nil
+		}
+	}
+	return nil, errors.New("not found")
+}
+
 func (r *testSSOProviderRepo) List(filters map[string]interface{}) ([]*domain.SSOProvider, int64, error) {
 	result := make([]*domain.SSOProvider, 0, len(r.providers))
 	for _, provider := range r.providers {

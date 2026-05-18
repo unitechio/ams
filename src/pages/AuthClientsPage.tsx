@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/ui/pagination';
-import { clientsApi, serviceAccountsApi, type AuthClient, type PaginatedResponse } from '@/lib/api';
+import { clientsApi, copyText, serviceAccountsApi, type AuthClient, type PaginatedResponse } from '@/lib/api';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Guard } from '@/guards/Guard';
 import { PERMISSIONS } from '@/auth/permissions';
@@ -156,7 +156,14 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => { navigator.clipboard.writeText(client.client_secret || ''); toast.success('Đã sao chép client secret'); }} disabled={client.public}>
+                          <Button variant="ghost" size="icon" onClick={async () => {
+                            try {
+                              await copyText(client.client_secret || '');
+                              toast.success('Đã sao chép client secret');
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : 'Không thể sao chép client secret');
+                            }
+                          }} disabled={client.public}>
                             <Copy className="h-4 w-4 text-slate-500" />
                           </Button>
                           <Button variant="ghost" size="icon" onClick={() => navigate(editPath(client.id))}>

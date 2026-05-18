@@ -1,37 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2, Plus, RefreshCcw, Search, Settings2, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/ui/pagination';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { referenceOptionsApi, type PaginatedResponse, type ReferenceOption } from '@/lib/api';
 import { Guard } from '@/guards/Guard';
 import { PERMISSIONS } from '@/auth/permissions';
 import { toast } from 'sonner';
 
-const DEFAULT_FORM = {
-  option_group: '',
-  value: '',
-  label: '',
-  description: '',
-  meta_json: '{}',
-  sort_order: 100,
-  active: true,
-};
-
 export default function ReferenceOptionsPage() {
+  const navigate = useNavigate();
   const [result, setResult] = useState<PaginatedResponse<ReferenceOption> | null>(null);
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<ReferenceOption | null>(null);
-  const [form, setForm] = useState(DEFAULT_FORM);
-  const [saving, setSaving] = useState(false);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ReferenceOption | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -48,7 +37,7 @@ export default function ReferenceOptionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, groupFilter, page]);
+  }, [groupFilter, page, search]);
 
   useEffect(() => {
     fetchData();
@@ -59,99 +48,35 @@ export default function ReferenceOptionsPage() {
     return groups.sort();
   }, [result]);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm(DEFAULT_FORM);
-    setDialogOpen(true);
-  };
-
-  const openEdit = (item: ReferenceOption) => {
-    setEditing(item);
-    setForm({
-      option_group: item.option_group,
-      value: item.value,
-      label: item.label,
-      description: item.description,
-      meta_json: item.meta_json || '{}',
-      sort_order: item.sort_order,
-      active: item.active,
-    });
-    setDialogOpen(true);
-  };
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      if (editing) {
-        await referenceOptionsApi.update(editing.id, form);
-        toast.success('Cập nhật reference option thành công');
-      } else {
-        await referenceOptionsApi.create(form);
-        toast.success('Tạo reference option thành công');
-      }
-      setDialogOpen(false);
-      fetchData();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Lưu reference option thất bại');
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="space-y-6">
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{editing ? 'Cập nhật reference option' : 'Tạo reference option mới'}</DialogTitle>
-            <DialogDescription>
-              Catalog DB-backed cho các dropdown và template runtime, tránh hard-code option trong form quản trị.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div><Label>Option Group</Label><Input value={form.option_group} onChange={(e) => setForm((f) => ({ ...f, option_group: e.target.value }))} placeholder="client_template" /></div>
-            <div><Label>Value</Label><Input value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} placeholder="spa_web" /></div>
-            <div><Label>Label</Label><Input value={form.label} onChange={(e) => setForm((f) => ({ ...f, label: e.target.value }))} placeholder="SPA Web" /></div>
-            <div><Label>Sort Order</Label><Input type="number" value={form.sort_order} onChange={(e) => setForm((f) => ({ ...f, sort_order: Number(e.target.value || 100) }))} /></div>
-            <div className="md:col-span-2"><Label>Description</Label><Input value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} /></div>
-            <div className="md:col-span-2">
-              <Label>Meta JSON</Label>
-              <textarea
-                value={form.meta_json}
-                onChange={(e) => setForm((f) => ({ ...f, meta_json: e.target.value }))}
-                className="min-h-40 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-emerald-400"
-                placeholder='{"app_type":"web_app"}'
-              />
-            </div>
-            <div className="flex items-center gap-5 pt-6 text-sm">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={form.active} onChange={(e) => setForm((f) => ({ ...f, active: e.target.checked }))} /> Active</label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Hủy</Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Lưu
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
+      <StepUpDialog
+        open={stepUpOpen}
+        onOpenChange={setStepUpOpen}
+        onVerified={async () => {
+          if (!deleteTarget) return;
+          await referenceOptionsApi.delete(deleteTarget.id);
+          toast.success(`Đã xóa ${deleteTarget.value}`);
+          setDeleteTarget(null);
+          fetchData();
+        }}
+        description="Xác thực lại để xóa reference option."
+      />
       <PageHeader
         title="Reference Options"
-        subtitle="Quản trị tập option dùng chung cho template, dropdown và catalog mở rộng runtime"
+        subtitle="Catalog DB-backed cho các dropdown và template runtime. Form create/edit đã được tách sang page riêng."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={fetchData}><RefreshCcw className="mr-2 h-4 w-4" />Làm mới</Button>
             <Guard permission={PERMISSIONS.OPTION_CREATE}>
-              <Button onClick={openCreate}><Plus className="mr-2 h-4 w-4" />Thêm mới</Button>
+              <Button onClick={() => navigate('/reference-options/create')}><Plus className="mr-2 h-4 w-4" />Thêm mới</Button>
             </Guard>
           </div>
         }
       />
 
-      <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 md:flex-row md:items-center">
+      <div className="rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 md:flex-row md:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
             <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm theo group, value, label" className="pl-9" />
@@ -173,7 +98,7 @@ export default function ReferenceOptionsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-400">
+                  <tr className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-400 dark:bg-slate-950/60">
                     <th className="px-4 py-3">Group / Value</th>
                     <th className="px-4 py-3">Label</th>
                     <th className="px-4 py-3">Meta</th>
@@ -183,13 +108,13 @@ export default function ReferenceOptionsPage() {
                 </thead>
                 <tbody>
                   {(result?.data || []).map((item) => (
-                    <tr key={item.id} className="border-t border-slate-100">
+                    <tr key={item.id} className="border-t border-slate-100 dark:border-slate-800">
                       <td className="px-4 py-3">
-                        <div className="font-semibold text-slate-800">{item.option_group}</div>
+                        <div className="font-semibold text-slate-800 dark:text-slate-100">{item.option_group}</div>
                         <div className="text-xs text-slate-400">{item.value}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-slate-700">{item.label}</div>
+                        <div className="font-medium text-slate-700 dark:text-slate-200">{item.label}</div>
                         <div className="text-xs text-slate-400">{item.description || 'Không có mô tả'}</div>
                       </td>
                       <td className="px-4 py-3 text-xs text-slate-500">
@@ -204,22 +129,14 @@ export default function ReferenceOptionsPage() {
                       <td className="px-4 py-3">
                         <div className="flex justify-end gap-2">
                           <Guard permission={PERMISSIONS.OPTION_UPDATE}>
-                            <Button variant="outline" size="sm" onClick={() => openEdit(item)}>Sửa</Button>
+                            <Button variant="outline" size="sm" onClick={() => navigate(`/reference-options/${item.id}/edit`)}>Sửa</Button>
                           </Guard>
                           <Guard permission={PERMISSIONS.OPTION_DELETE}>
                             <Button
                               variant="outline"
                               size="icon"
                               className="text-rose-600"
-                              onClick={async () => {
-                                try {
-                                  await referenceOptionsApi.delete(item.id);
-                                  toast.success(`Đã xóa ${item.value}`);
-                                  fetchData();
-                                } catch (err) {
-                                  toast.error(err instanceof Error ? err.message : 'Xóa reference option thất bại');
-                                }
-                              }}
+                              onClick={() => { setDeleteTarget(item); setStepUpOpen(true); }}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>

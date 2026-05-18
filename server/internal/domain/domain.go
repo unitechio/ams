@@ -357,6 +357,7 @@ type ClientRepository interface {
 
 type SSOProviderRepository interface {
 	FindByProviderID(providerID string) (*SSOProvider, error)
+	FindByID(id uint) (*SSOProvider, error)
 	List(filters map[string]interface{}) ([]*SSOProvider, int64, error)
 	Save(provider *SSOProvider) error
 	Delete(id uint) error
@@ -376,6 +377,7 @@ type SecurityPolicyRepository interface {
 }
 
 type ReferenceOptionRepository interface {
+	FindByID(id uint) (*ReferenceOption, error)
 	List(filters map[string]interface{}) ([]*ReferenceOption, int64, error)
 	Save(item *ReferenceOption) error
 	Delete(id uint) error

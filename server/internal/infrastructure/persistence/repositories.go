@@ -830,6 +830,14 @@ func (r *GormSSOProviderRepository) FindByProviderID(providerID string) (*domain
 	return gormToSSOProvider(&model), nil
 }
 
+func (r *GormSSOProviderRepository) FindByID(id uint) (*domain.SSOProvider, error) {
+	var model GormSSOProvider
+	if err := r.db.First(&model, id).Error; err != nil {
+		return nil, err
+	}
+	return gormToSSOProvider(&model), nil
+}
+
 func (r *GormSSOProviderRepository) List(filters map[string]interface{}) ([]*domain.SSOProvider, int64, error) {
 	q := r.db.Model(&GormSSOProvider{})
 	if search, ok := filters["search"].(string); ok && strings.TrimSpace(search) != "" {
@@ -1146,6 +1154,25 @@ func (r *GormReferenceOptionRepository) List(filters map[string]interface{}) ([]
 		}
 	}
 	return result, total, nil
+}
+
+func (r *GormReferenceOptionRepository) FindByID(id uint) (*domain.ReferenceOption, error) {
+	var model GormReferenceOption
+	if err := r.db.First(&model, id).Error; err != nil {
+		return nil, err
+	}
+	return &domain.ReferenceOption{
+		ID:          model.ID,
+		OptionGroup: model.OptionGroup,
+		Value:       model.Value,
+		Label:       model.Label,
+		Description: model.Description,
+		MetaJSON:    model.MetaJSON,
+		SortOrder:   model.SortOrder,
+		Active:      model.Active,
+		CreatedAt:   model.CreatedAt,
+		UpdatedAt:   model.UpdatedAt,
+	}, nil
 }
 
 func (r *GormReferenceOptionRepository) Save(item *domain.ReferenceOption) error {

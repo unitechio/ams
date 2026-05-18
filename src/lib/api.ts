@@ -133,6 +133,31 @@ export function getStepUpToken() {
   return token;
 }
 
+export function isStepUpRequiredError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('xác thực lại') || message.includes('step_up') || message.includes('step-up');
+}
+
+export async function copyText(value: string) {
+  if (!value) throw new Error('Không có dữ liệu để sao chép');
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', 'true');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  const ok = document.execCommand('copy');
+  document.body.removeChild(textarea);
+  if (!ok) throw new Error('Trình duyệt không hỗ trợ sao chép tự động');
+}
+
 export interface UserInfo {
   id:          number;
   username:    string;
@@ -592,6 +617,7 @@ export const ssoProvidersAdminApi = {
     if (params?.page_size) q.set('page_size', String(params.page_size));
     return get<PaginatedResponse<AdminSSOProvider>>(`/sso-providers?${q}`);
   },
+  get: (id: number) => get<AdminSSOProvider>(`/sso-providers/${id}`),
   create: (data: Omit<AdminSSOProvider, 'id' | 'created_at'>) => post<AdminSSOProvider>('/sso-providers', data),
   update: (id: number, data: Omit<AdminSSOProvider, 'id' | 'created_at'>) => put<AdminSSOProvider>(`/sso-providers/${id}`, data),
   delete: (id: number) => del<void>(`/sso-providers/${id}`),
@@ -650,13 +676,17 @@ export const referenceOptionsApi = {
         const refreshed = await tryRefresh();
         if (refreshed) return referenceOptionsApi.list(params);
       }
+      if (res.status === 403) {
+        return fallbackReferenceOptions(params);
+      }
       const json = await res.json().catch(() => ({ success: false, error: 'Lỗi phân tích dữ liệu' }));
       if (!res.ok || !json.success) throw new Error(json.error || 'Lỗi không xác định');
       return json.data as PaginatedResponse<ReferenceOption>;
-    } catch (err) {
-      throw err;
+    } catch {
+      return fallbackReferenceOptions(params);
     }
   },
+  get: (id: number) => get<ReferenceOption>(`/reference-options/${id}`),
   create: (data: Omit<ReferenceOption, 'id' | 'created_at'>) => post<ReferenceOption>('/reference-options', data),
   update: (id: number, data: Omit<ReferenceOption, 'id' | 'created_at'>) => put<ReferenceOption>(`/reference-options/${id}`, data),
   delete: (id: number) => del<void>(`/reference-options/${id}`),

@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Bot, Building2, Globe, Loader2, Save, ShieldCheck } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { clientsApi, loginChannelsApi, referenceOptionsApi, serviceAccountsApi, type LoginChannel, type ReferenceOption } from '@/lib/api';
+import { clientsApi, isStepUpRequiredError, loginChannelsApi, referenceOptionsApi, serviceAccountsApi, type LoginChannel, type ReferenceOption } from '@/lib/api';
 
 type Mode = 'all' | 'service';
 
@@ -105,6 +106,8 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEdit, setIsEdit] = useState(Boolean(clientId));
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<null | (() => Promise<void>)>(null);
 
   const clientApi = isServiceMode ? serviceAccountsApi : clientsApi;
   const backPath = isServiceMode ? '/service-accounts' : '/auth-clients';
@@ -229,19 +232,28 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
     }));
   };
 
+  const submit = useCallback(async () => {
+    const payload = buildPayload(form, mode);
+    if (clientId) {
+      await clientApi.update(clientId, payload);
+      toast.success(isServiceMode ? 'Cập nhật service account thành công' : 'Cập nhật auth client thành công');
+    } else {
+      await clientApi.create(payload);
+      toast.success(isServiceMode ? 'Tạo service account thành công' : 'Tạo auth client thành công');
+    }
+    navigate(backPath);
+  }, [backPath, clientApi, clientId, form, isServiceMode, mode, navigate]);
+
   const handleSave = async () => {
     setSaving(true);
     try {
-      const payload = buildPayload(form, mode);
-      if (clientId) {
-        await clientApi.update(clientId, payload);
-        toast.success(isServiceMode ? 'Cập nhật service account thành công' : 'Cập nhật auth client thành công');
-      } else {
-        await clientApi.create(payload);
-        toast.success(isServiceMode ? 'Tạo service account thành công' : 'Tạo auth client thành công');
-      }
-      navigate(backPath);
+      await submit();
     } catch (err) {
+      if (isStepUpRequiredError(err)) {
+        setPendingAction(() => submit);
+        setStepUpOpen(true);
+        return;
+      }
       toast.error(err instanceof Error ? err.message : 'Lưu auth client thất bại');
     } finally {
       setSaving(false);
@@ -254,6 +266,21 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
 
   return (
     <div className="space-y-6">
+      <StepUpDialog
+        open={stepUpOpen}
+        onOpenChange={setStepUpOpen}
+        onVerified={async () => {
+          if (!pendingAction) return;
+          setSaving(true);
+          try {
+            await pendingAction();
+          } finally {
+            setPendingAction(null);
+            setSaving(false);
+          }
+        }}
+        description="Xác thực lại để tạo hoặc cập nhật OAuth client / service account."
+      />
       <PageHeader
         title={isEdit
           ? (isServiceMode ? 'Cập nhật Service Account' : 'Cập nhật OAuth Client')
