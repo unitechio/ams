@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Pagination } from '@/components/ui/pagination';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
   DialogDescription, DialogFooter,
@@ -214,6 +215,7 @@ export default function PermissionsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState<string>('');
+  const [page, setPage] = useState(1);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [lineDialogOpen, setLineDialogOpen] = useState(false);
@@ -247,6 +249,8 @@ export default function PermissionsPage() {
     const matchGroup = !groupFilter || p.group_name === groupFilter;
     return matchSearch && matchGroup;
   });
+  const pageSize = 12;
+  const paginated = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const totalLines = permissions.reduce((s, p) => s + (p.lines?.length ?? 0), 0);
 
@@ -368,7 +372,7 @@ export default function PermissionsPage() {
             <Input
               placeholder="Tìm theo mã, tên, nhóm..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
+              onChange={e => { setSearch(e.target.value); setPage(1); }}
               className="pl-9 h-9 rounded-lg border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950 text-sm focus-visible:ring-emerald-500"
             />
           </div>
@@ -376,7 +380,7 @@ export default function PermissionsPage() {
           {/* Group filter pills */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <button
-              onClick={() => setGroupFilter('')}
+              onClick={() => { setGroupFilter(''); setPage(1); }}
               className={cn(
                 'px-3 py-1 rounded-full text-[11px] font-semibold transition-colors',
                 groupFilter === '' 
@@ -391,7 +395,10 @@ export default function PermissionsPage() {
               return (
                 <button
                   key={g}
-                  onClick={() => setGroupFilter(prev => prev === g ? '' : g)}
+                  onClick={() => {
+                    setGroupFilter(prev => prev === g ? '' : g);
+                    setPage(1);
+                  }}
                   className={cn(
                     'px-3 py-1 rounded-full text-[11px] font-semibold transition-all ring-1',
                     groupFilter === g
@@ -432,17 +439,22 @@ export default function PermissionsPage() {
             </Button>
           </div>
         ) : (
-          <div className="space-y-2.5">
-            {filtered.map(p => (
-              <PermissionCard
-                key={`${p.id}-${p.code}`}
-                perm={p}
-                onEdit={() => openEdit(p)}
-                onDelete={() => handleDelete(p.id)}
-                onAddLine={() => openAddLine(p)}
-                onDeleteLine={lineId => handleDeleteLine(p.code, lineId)}
-              />
-            ))}
+          <div className="space-y-3">
+            <div className="space-y-2.5">
+              {paginated.map(p => (
+                <PermissionCard
+                  key={`${p.id}-${p.code}`}
+                  perm={p}
+                  onEdit={() => openEdit(p)}
+                  onDelete={() => handleDelete(p.id)}
+                  onAddLine={() => openAddLine(p)}
+                  onDeleteLine={lineId => handleDeleteLine(p.code, lineId)}
+                />
+              ))}
+            </div>
+            <div className="rounded-xl border border-slate-100 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <Pagination total={filtered.length} page={page} pageSize={pageSize} onPageChange={setPage} />
+            </div>
           </div>
         )}
       </div>

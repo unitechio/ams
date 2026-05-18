@@ -4,6 +4,7 @@ import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Pagination } from '@/components/ui/pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { usersApi, rolesApi, type ApiUser, type ApiRole } from '@/lib/api';
 import { toast } from 'sonner';
@@ -23,6 +24,8 @@ export default function UserRolesPage() {
   const [userSearch, setUserSearch] = useState('');
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [selectedRoleIDs, setSelectedRoleIDs] = useState<number[]>([]);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -65,6 +68,7 @@ export default function UserRolesPage() {
       prev.includes(id) ? prev.filter(rid => rid !== id) : [...prev, id]
     );
   };
+  const paginatedRoles = roles.slice((page - 1) * pageSize, page * pageSize);
 
   const handleSave = async () => {
     if (!selectedUser) return;
@@ -177,11 +181,11 @@ export default function UserRolesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {roles.map((r, idx) => {
+              {paginatedRoles.map((r, idx) => {
                 const isChecked = selectedRoleIDs.includes(r.id);
                 return (
                   <TableRow key={r.id} className={`group transition-colors ${isChecked ? 'bg-emerald-50/30' : 'hover:bg-gray-50/50'}`}>
-                    <TableCell className="text-center text-xs text-gray-400 font-mono">{idx + 1}</TableCell>
+                    <TableCell className="text-center text-xs text-gray-400 font-mono">{(page - 1) * pageSize + idx + 1}</TableCell>
                     <TableCell className="text-center">
                       <div
                         onClick={() => toggleRole(r.id)}
@@ -205,8 +209,11 @@ export default function UserRolesPage() {
             </TableBody>
           </Table>
 
-          <div className="p-3 border-t border-gray-50 bg-gray-50/20 text-[10px] text-gray-400 flex items-center gap-2">
-            <RefreshCcw className="w-3 h-3" /> Hiển thị {roles.length} tới {roles.length} của {roles.length} dữ liệu
+          <div className="border-t border-gray-50 bg-gray-50/20 p-3">
+            <div className="mb-2 flex items-center gap-2 text-[10px] text-gray-400">
+              <RefreshCcw className="w-3 h-3" /> Hiển thị {(page - 1) * pageSize + 1} tới {Math.min(page * pageSize, roles.length)} của {roles.length} dữ liệu
+            </div>
+            <Pagination total={roles.length} page={page} pageSize={pageSize} onPageChange={setPage} />
           </div>
         </div>
       ) : (

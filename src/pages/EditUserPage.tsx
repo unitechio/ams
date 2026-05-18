@@ -12,27 +12,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { usersApi, rolesApi, type ApiRole, type ApiUser } from '@/lib/api';
+import { clientsApi, loginChannelsApi, usersApi, rolesApi, type ApiRole, type ApiUser, type AuthClient, type LoginChannel } from '@/lib/api';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
-
-const CLIENT_OPTIONS = [
-  { value: 'web_portal', label: 'Web Portal' },
-  { value: 'crm_portal', label: 'CRM Portal' },
-  { value: 'mobile_app_tpv_public', label: 'Mobile App' },
-];
-
-const CHANNEL_OPTIONS = [
-  { value: 'web', label: 'Web' },
-  { value: 'crm', label: 'CRM' },
-  { value: 'mobile', label: 'Mobile' },
-];
 
 export default function EditUserPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [roles, setRoles] = useState<ApiRole[]>([]);
+  const [clients, setClients] = useState<AuthClient[]>([]);
+  const [channels, setChannels] = useState<LoginChannel[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [user, setUser] = useState<ApiUser | null>(null);
@@ -50,20 +40,17 @@ export default function EditUserPage() {
     if (!id) return;
 
     setLoading(true);
-    // Note: Ideally we'd have a GetByID endpoint, but we'll use list for now
     Promise.all([
-      usersApi.list({ search: '', page: 1, page_size: 1000 }),
-      rolesApi.list({ page_size: 100 })
+      usersApi.get(parseInt(id)),
+      rolesApi.list({ page_size: 100 }),
+      clientsApi.list({ page: 1, page_size: 200 }),
+      loginChannelsApi.list({ active: 'true', page: 1, page_size: 100 }),
     ])
-      .then(([usersRes, rolesRes]) => {
-        const found = usersRes.data.find(u => u.id === parseInt(id));
-        if (!found) {
-          toast.error('Không tìm thấy người dùng');
-          navigate('/users');
-          return;
-        }
+      .then(([found, rolesRes, clientsRes, channelsRes]) => {
         setUser(found);
         setRoles(rolesRes.data);
+        setClients((clientsRes.data || []).filter(client => client.active));
+        setChannels((channelsRes.data || []).filter(channel => channel.active));
         setForm({
           full_name: found.full_name,
           email: found.email,
@@ -301,32 +288,54 @@ export default function EditUserPage() {
 
               <div className="pt-4 border-t border-slate-50 space-y-3">
                 <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Client được phép đăng nhập</Label>
-                <div className="space-y-2">
-                  {CLIENT_OPTIONS.map((option) => (
-                    <label key={option.value} className="flex items-center gap-2 text-sm text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={form.allowed_clients.includes(option.value)}
-                        onChange={() => toggleMulti('allowed_clients', option.value)}
-                      />
-                      {option.label}
-                    </label>
+                <div className="grid gap-2">
+                  {clients.map((client) => (
+                    <button
+                      key={client.id}
+                      type="button"
+                      onClick={() => toggleMulti('allowed_clients', client.client_id)}
+                      className={cn(
+                        'rounded-xl border px-3 py-3 text-left transition-all',
+                        form.allowed_clients.includes(client.client_id)
+                          ? 'border-emerald-300 bg-emerald-50'
+                          : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40',
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-800">{client.name || client.client_id}</div>
+                          <div className="text-[11px] text-slate-400">{client.client_id} • {client.app_type}</div>
+                        </div>
+                        <div className={cn('h-4 w-4 rounded-full border', form.allowed_clients.includes(client.client_id) ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300')} />
+                      </div>
+                    </button>
                   ))}
                 </div>
               </div>
 
               <div className="pt-4 border-t border-slate-50 space-y-3">
                 <Label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Kênh đăng nhập</Label>
-                <div className="space-y-2">
-                  {CHANNEL_OPTIONS.map((option) => (
-                    <label key={option.value} className="flex items-center gap-2 text-sm text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={form.allowed_channels.includes(option.value)}
-                        onChange={() => toggleMulti('allowed_channels', option.value)}
-                      />
-                      {option.label}
-                    </label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {channels.map((channel) => (
+                    <button
+                      key={channel.id}
+                      type="button"
+                      onClick={() => toggleMulti('allowed_channels', channel.code)}
+                      className={cn(
+                        'rounded-xl border px-3 py-3 text-left transition-all',
+                        form.allowed_channels.includes(channel.code)
+                          ? 'border-sky-300 bg-sky-50'
+                          : 'border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50/40',
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-slate-800">{channel.name}</div>
+                          <div className="text-[11px] text-slate-400">{channel.code} • risk {channel.risk_level}</div>
+                        </div>
+                        <div className={cn('h-4 w-4 rounded-full border', form.allowed_channels.includes(channel.code) ? 'border-sky-500 bg-sky-500' : 'border-slate-300')} />
+                      </div>
+                    </button>
                   ))}
                 </div>
               </div>
