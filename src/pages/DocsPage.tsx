@@ -31,6 +31,20 @@ const backendModules = [
   'jwt: access token, refresh token, rotation, validation',
 ];
 
+type EndpointDoc = {
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  path: string;
+  description: string;
+  notes?: string[];
+};
+
+type BackendApiSection = {
+  id: string;
+  title: string;
+  summary: string;
+  endpoints: EndpointDoc[];
+};
+
 const frontendModules = [
   'routes/routeConfig.tsx: route tree, protected pages, editor pages, callback routes',
   'components/layout: admin shell, sidebar, header, breadcrumb, page header',
@@ -198,6 +212,248 @@ Storage
   |- PostgreSQL: users, roles, permissions, menus, policies, clients, channels, logs
   |- Redis-ready concepts already modeled at runtime: rate limit, refresh reuse, session/device policy`;
 
+const backendApiConventions = [
+  '`Base URL`: tất cả API đi qua `/api/v1`, riêng health check là `/health`.',
+  '`Response envelope`: backend trả theo dạng `{ success, data }`; lỗi trả `{ success: false, error }`.',
+  '`Bearer token`: route private yêu cầu `Authorization: Bearer <access_token>`.',
+  '`Step-up token`: thao tác nhạy cảm gửi thêm `X-Step-Up-Token` sau khi gọi `POST /auth/step-up`.',
+  '`Refresh token`: FE tự gọi `POST /auth/refresh` khi access token hết hạn; refresh token cũng được rotate.',
+  '`Pagination`: đa số list API dùng `page`, `page_size` và trả `{ data, total, page, page_size, total_pages }`.',
+  '`Authorization`: backend không tin permission trong JWT; middleware luôn load permission mới từ DB rồi mới authorize.',
+];
+
+const backendApiSections: BackendApiSection[] = [
+  {
+    id: 'backend-public-auth',
+    title: 'Public Auth & OAuth Entry',
+    summary: 'Nhóm API không cần JWT, dùng cho login, OAuth2/OIDC entrypoint, SSO callback và password recovery.',
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/auth/login',
+        description: 'Đăng nhập username/password cho flow trực tiếp hoặc legacy password-style flow nội bộ.',
+        notes: [
+          'Payload thường gồm `username`, `password`, `client_id`, `channel`, `device_name`, `device_fingerprint`, `otp_code`, `trust_device`.',
+          'Response trả `access_token`, `refresh_token`, `user` và các cờ `must_change_password`, `one_time_password`, `password_expired`.',
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/auth/authorize',
+        description: 'Entry cho `authorization_code + PKCE`, trả authorization code nội bộ để FE/app exchange tiếp qua `/auth/token`.',
+        notes: [
+          'Payload có `client_id`, `redirect_uri`, `code_challenge`, `code_challenge_method`, cộng với credential user.',
+          'Dùng cho web portal, CRM SPA, mobile app public client.',
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/auth/token',
+        description: 'Exchange token cho `authorization_code` hoặc phát token `client_credentials` cho service account.',
+        notes: [
+          'Authorization code flow dùng `client_id`, `client_secret?`, `code`, `redirect_uri`, `code_verifier`, `grant_type=authorization_code`.',
+          'Service account dùng `client_id`, `client_secret`, `grant_type=client_credentials`.',
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/auth/refresh',
+        description: 'Đổi refresh token sang access token mới và refresh token mới sau rotation.',
+        notes: [
+          'Payload chỉ cần `refresh_token`.',
+          'Nếu detect reuse thì session/token family sẽ bị revoke toàn bộ.',
+        ],
+      },
+      {
+        method: 'POST',
+        path: '/auth/forgot-password',
+        description: 'Khởi tạo quên mật khẩu, gửi token reset qua kênh notification backend hỗ trợ.',
+      },
+      {
+        method: 'POST',
+        path: '/auth/reset-password',
+        description: 'Đặt lại mật khẩu bằng token reset một lần.',
+      },
+      {
+        method: 'POST',
+        path: '/auth/verify-email',
+        description: 'Xác minh email bằng token verify ngắn hạn.',
+      },
+      {
+        method: 'GET',
+        path: '/auth/sso/providers',
+        description: 'Lấy danh sách SSO provider đang bật để FE render nút đăng nhập liên kết.',
+      },
+      {
+        method: 'GET',
+        path: '/auth/sso/:provider/start',
+        description: 'Tạo redirect URL tới IdP theo provider cụ thể.',
+      },
+      {
+        method: 'POST',
+        path: '/auth/sso/:provider/complete',
+        description: 'Hoàn tất callback SSO, map identity, chạy policy login rồi phát local session/token.',
+        notes: [
+          'Payload thường có `code`, `state`, `client_id`, `channel`, `device_name`, `device_fingerprint`, `otp_code`, `trust_device`.',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'backend-self-service',
+    title: 'Authenticated Self-service',
+    summary: 'Nhóm API cho chính user đang đăng nhập: profile, đổi mật khẩu, step-up, session và 2FA.',
+    endpoints: [
+      { method: 'POST', path: '/auth/logout', description: 'Đăng xuất session hiện tại.' },
+      { method: 'GET', path: '/auth/me', description: 'Lấy profile, roles, permissions, allowed_clients và allowed_channels của user hiện tại.' },
+      { method: 'PUT', path: '/auth/change-password', description: 'Đổi mật khẩu từ session đang đăng nhập; áp password policy và password history.' },
+      { method: 'POST', path: '/auth/send-verification-email', description: 'Gửi lại email verify.' },
+      {
+        method: 'POST',
+        path: '/auth/step-up',
+        description: 'Lấy step-up token ngắn hạn để xác nhận lại thao tác nhạy cảm.',
+        notes: [
+          'Payload gồm `password` và có thể kèm `otp_code` nếu account yêu cầu MFA.',
+          'Response có `step_up_token` và `expires_at`; FE gửi qua header `X-Step-Up-Token` cho các action protected.',
+        ],
+      },
+      { method: 'GET', path: '/auth/sessions', description: 'Liệt kê active sessions của user hiện tại.' },
+      { method: 'DELETE', path: '/auth/sessions/:id', description: 'Revoke một session cụ thể; đang được bảo vệ bằng action policy `session.revoke`.' },
+      { method: 'DELETE', path: '/auth/sessions', description: 'Revoke toàn bộ session của chính user.' },
+      { method: 'POST', path: '/auth/2fa/setup', description: 'Khởi tạo TOTP secret và QR code URL.' },
+      { method: 'POST', path: '/auth/2fa/verify', description: 'Xác nhận mã TOTP để bật 2FA.' },
+      { method: 'POST', path: '/auth/2fa/disable', description: 'Tắt 2FA; cần step-up theo action `2fa.disable`.' },
+      { method: 'GET', path: '/my-menus', description: 'Lấy menu đã filter theo permission của user; sidebar dùng endpoint này.' },
+    ],
+  },
+  {
+    id: 'backend-user-access',
+    title: 'User / Role / Permission / Menu',
+    summary: 'Nhóm quản trị truy cập người dùng và authorization runtime nền tảng.',
+    endpoints: [
+      { method: 'GET', path: '/users', description: 'Danh sách user có pagination, search và scope filter từ middleware.' },
+      { method: 'GET', path: '/users/:id', description: 'Chi tiết user để edit.' },
+      { method: 'POST', path: '/users', description: 'Tạo user mới với role_ids, password boundary, allowed_clients và allowed_channels.' },
+      { method: 'PUT', path: '/users/:id', description: 'Cập nhật thông tin và boundary của user.' },
+      { method: 'DELETE', path: '/users/:id', description: 'Xóa user; route này hiện còn dùng RequireStepUp cứng.' },
+      { method: 'POST', path: '/users/:id/reset-password', description: 'Reset password admin-side; bảo vệ bởi action policy `user.reset_password`.' },
+      { method: 'GET', path: '/roles', description: 'Danh sách role có pagination.' },
+      { method: 'GET', path: '/roles/:id', description: 'Chi tiết role.' },
+      { method: 'POST', path: '/roles', description: 'Tạo role mới.' },
+      { method: 'PUT', path: '/roles/:id', description: 'Cập nhật role.' },
+      { method: 'DELETE', path: '/roles/:id', description: 'Xóa role.' },
+      { method: 'PUT', path: '/roles/:id/permissions', description: 'Gán permission cho role; action policy `role.assign_permissions` có thể ép step-up.' },
+      { method: 'GET', path: '/permissions', description: 'Lấy danh sách permission registry và permission lines.' },
+      { method: 'POST', path: '/permissions', description: 'Tạo permission mới.' },
+      { method: 'POST', path: '/permissions/:code/lines', description: 'Thêm controller/action line cho permission.' },
+      { method: 'DELETE', path: '/permissions/:code/lines/:lineID', description: 'Xóa permission line.' },
+      { method: 'GET', path: '/menus', description: 'Danh sách menu quản trị có pagination.' },
+      { method: 'POST', path: '/menus', description: 'Tạo menu mới.' },
+      { method: 'PUT', path: '/menus/:id', description: 'Cập nhật menu.' },
+      { method: 'DELETE', path: '/menus/:id', description: 'Xóa menu.' },
+    ],
+  },
+  {
+    id: 'backend-auth-governance',
+    title: 'OAuth / Client / Channel / Policy Governance',
+    summary: 'Nhóm API quản trị security boundary của app, service, channel, SSO và policy runtime.',
+    endpoints: [
+      { method: 'GET', path: '/auth-clients', description: 'Danh sách OAuth clients với filter app_type, search, pagination.' },
+      { method: 'GET', path: '/auth-clients/:id', description: 'Chi tiết auth client.' },
+      { method: 'POST', path: '/auth-clients', description: 'Tạo OAuth client mới; thường cần step-up trước khi submit.' },
+      { method: 'PUT', path: '/auth-clients/:id', description: 'Cập nhật auth client.' },
+      { method: 'POST', path: '/auth-clients/:id/rotate-secret', description: 'Rotate client secret; action policy `client.rotate_secret`.' },
+      { method: 'DELETE', path: '/auth-clients/:id', description: 'Xóa auth client; action policy `client.delete`.' },
+      { method: 'GET', path: '/service-accounts', description: 'Danh sách service account dùng chung entity client nhưng semantics M2M.' },
+      { method: 'GET', path: '/service-accounts/:id', description: 'Chi tiết service account.' },
+      { method: 'POST', path: '/service-accounts', description: 'Tạo service account mới.' },
+      { method: 'PUT', path: '/service-accounts/:id', description: 'Cập nhật service account.' },
+      { method: 'POST', path: '/service-accounts/:id/rotate-secret', description: 'Rotate secret cho service account.' },
+      { method: 'DELETE', path: '/service-accounts/:id', description: 'Xóa service account.' },
+      { method: 'GET', path: '/sso-providers', description: 'Danh sách SSO provider DB-backed.' },
+      { method: 'GET', path: '/sso-providers/:id', description: 'Chi tiết SSO provider.' },
+      { method: 'POST', path: '/sso-providers', description: 'Tạo SSO provider mới.' },
+      { method: 'PUT', path: '/sso-providers/:id', description: 'Cập nhật SSO provider.' },
+      { method: 'DELETE', path: '/sso-providers/:id', description: 'Xóa SSO provider.' },
+      { method: 'GET', path: '/login-channels', description: 'Danh sách login channel, risk level và TTL mặc định.' },
+      { method: 'GET', path: '/login-channels/:id', description: 'Chi tiết login channel.' },
+      { method: 'POST', path: '/login-channels', description: 'Tạo login channel.' },
+      { method: 'PUT', path: '/login-channels/:id', description: 'Cập nhật login channel.' },
+      { method: 'DELETE', path: '/login-channels/:id', description: 'Xóa login channel.' },
+      { method: 'GET', path: '/security-policies', description: 'Danh sách security policy, filter theo `policy_type`, `scope_type`, `active`.' },
+      { method: 'GET', path: '/security-policies/:id', description: 'Chi tiết security policy.' },
+      { method: 'POST', path: '/security-policies', description: 'Tạo policy mới.' },
+      { method: 'PUT', path: '/security-policies/:id', description: 'Cập nhật policy; action policy `policy.update` có thể yêu cầu step-up.' },
+      { method: 'DELETE', path: '/security-policies/:id', description: 'Xóa policy; action policy `policy.delete`.' },
+      { method: 'GET', path: '/reference-options', description: 'Catalog option DB-backed cho dropdown/runtime metadata.' },
+      { method: 'GET', path: '/reference-options/:id', description: 'Chi tiết reference option.' },
+      { method: 'POST', path: '/reference-options', description: 'Tạo option mới.' },
+      { method: 'PUT', path: '/reference-options/:id', description: 'Cập nhật option.' },
+      { method: 'DELETE', path: '/reference-options/:id', description: 'Xóa option.' },
+    ],
+  },
+  {
+    id: 'backend-observability',
+    title: 'Audit / Device / Session Observability',
+    summary: 'Nhóm API phục vụ vận hành, audit trail, trusted device và session revocation theo device.',
+    endpoints: [
+      { method: 'GET', path: '/logs/audit', description: 'Danh sách audit log; hỗ trợ `search`, `user`, `action`, `from`, `to`, pagination.' },
+      { method: 'GET', path: '/logs/auth', description: 'Lịch sử auth/login riêng.' },
+      { method: 'GET', path: '/devices', description: 'Danh sách device/session theo user/client/trusted state.' },
+      { method: 'DELETE', path: '/devices/:id', description: 'Revoke device/session theo device; action policy `device.revoke`.' },
+    ],
+  },
+];
+
+const backendApiExamples = [
+  {
+    title: 'Login password + channel + device',
+    body: `POST /api/v1/auth/login
+{
+  "username": "superadmin",
+  "password": "Admin@123",
+  "client_id": "web_portal",
+  "channel": "web",
+  "device_name": "Chrome Windows",
+  "device_fingerprint": "browser-fingerprint",
+  "trust_device": true
+}`,
+  },
+  {
+    title: 'Authorization code + PKCE exchange',
+    body: `POST /api/v1/auth/token
+{
+  "grant_type": "authorization_code",
+  "client_id": "mobile_customer",
+  "code": "auth-code",
+  "redirect_uri": "myapp://oauth/callback",
+  "code_verifier": "pkce-verifier"
+}`,
+  },
+  {
+    title: 'Service account client_credentials',
+    body: `POST /api/v1/auth/token
+{
+  "grant_type": "client_credentials",
+  "client_id": "payment_service",
+  "client_secret": "rotated-secret"
+}`,
+  },
+  {
+    title: 'Step-up rồi cập nhật policy',
+    body: `POST /api/v1/auth/step-up
+{
+  "password": "Admin@123",
+  "otp_code": "123456"
+}
+
+PUT /api/v1/security-policies/12
+Headers:
+  Authorization: Bearer <access_token>
+  X-Step-Up-Token: <step_up_token>`,
+  },
+];
+
 export default function DocsPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -361,6 +617,37 @@ export default function DocsPage() {
               <TabsContent value="backend" className="space-y-4">
                 <SectionTitle icon={ServerCog} title="Cấu trúc Go Backend" />
                 <ListCard items={backendModules} />
+                <AdminCard className="p-5">
+                  <div className="mb-4 flex items-center gap-2">
+                    <ServerCog className="h-4 w-4 text-emerald-500" />
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100">API conventions</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {backendApiConventions.map((item) => (
+                      <div key={item} className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-300">
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </AdminCard>
+                <div className="grid gap-4">
+                  {backendApiSections.map((section) => (
+                    <BackendApiCard key={section.id} section={section} />
+                  ))}
+                </div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {backendApiExamples.map((example) => (
+                    <AdminCard key={example.title} className="p-5">
+                      <div className="mb-3 flex items-center gap-2">
+                        <ScrollText className="h-4 w-4 text-emerald-500" />
+                        <h3 className="font-semibold text-slate-900 dark:text-slate-100">{example.title}</h3>
+                      </div>
+                      <pre className="overflow-x-auto rounded-2xl border border-slate-200 bg-slate-950 px-4 py-3 text-xs leading-6 text-emerald-100 dark:border-slate-800">
+                        {example.body}
+                      </pre>
+                    </AdminCard>
+                  ))}
+                </div>
               </TabsContent>
 
               <TabsContent value="frontend" className="space-y-4">
@@ -498,5 +785,38 @@ function GuideItem({ title, text }: { title: string; text: string }) {
       <p className="font-medium text-slate-900 dark:text-slate-100">{title}</p>
       <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{text}</p>
     </div>
+  );
+}
+
+function BackendApiCard({ section }: { section: BackendApiSection }) {
+  return (
+    <AdminCard id={section.id} className="p-5 scroll-mt-24">
+      <div className="mb-4">
+        <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{section.title}</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{section.summary}</p>
+      </div>
+      <div className="space-y-3">
+        {section.endpoints.map((endpoint) => (
+          <div key={`${endpoint.method}-${endpoint.path}`} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                {endpoint.method}
+              </span>
+              <code className="text-sm font-medium text-slate-900 dark:text-slate-100">{endpoint.path}</code>
+            </div>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">{endpoint.description}</p>
+            {endpoint.notes?.length ? (
+              <div className="mt-3 space-y-2">
+                {endpoint.notes.map((note) => (
+                  <div key={note} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+                    {note}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </AdminCard>
   );
 }
