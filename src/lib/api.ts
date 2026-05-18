@@ -633,6 +633,7 @@ export const loginChannelsApi = {
     if (params?.page_size) q.set('page_size', String(params.page_size));
     return get<PaginatedResponse<LoginChannel>>(`/login-channels?${q}`);
   },
+  get: (id: number) => get<LoginChannel>(`/login-channels/${id}`),
   create: (data: Omit<LoginChannel, 'id' | 'created_at'>) => post<LoginChannel>('/login-channels', data),
   update: (id: number, data: Omit<LoginChannel, 'id' | 'created_at'>) => put<LoginChannel>(`/login-channels/${id}`, data),
   delete: (id: number) => del<void>(`/login-channels/${id}`),

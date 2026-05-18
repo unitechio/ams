@@ -33,6 +33,8 @@ const SSOProvidersPage = lazy(() => import("@/pages/SSOProvidersPage"));
 const CreateSSOProviderPage = lazy(() => import("@/pages/CreateSSOProviderPage"));
 const EditSSOProviderPage = lazy(() => import("@/pages/EditSSOProviderPage"));
 const LoginChannelsPage = lazy(() => import("@/pages/LoginChannelsPage"));
+const CreateLoginChannelPage = lazy(() => import("@/pages/CreateLoginChannelPage"));
+const EditLoginChannelPage = lazy(() => import("@/pages/EditLoginChannelPage"));
 const SecurityPoliciesPage = lazy(() => import("@/pages/SecurityPoliciesPage"));
 const CreateSecurityPolicyPage = lazy(() => import("@/pages/CreateSecurityPolicyPage"));
 const EditSecurityPolicyPage = lazy(() => import("@/pages/EditSecurityPolicyPage"));
@@ -234,11 +236,32 @@ export const routes: RouteObject[] = [
       },
       {
         path: "login-channels",
-        element: (
-          <ProtectedRoute permissions={[PERMISSIONS.CHANNEL_READ]}>
-            {Loadable(LoginChannelsPage)({})}
-          </ProtectedRoute>
-        ),
+        children: [
+          {
+            index: true,
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.CHANNEL_READ]}>
+                {Loadable(LoginChannelsPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "create",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.CHANNEL_CREATE]}>
+                {Loadable(CreateLoginChannelPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: ":id/edit",
+            element: (
+              <ProtectedRoute permissions={[PERMISSIONS.CHANNEL_UPDATE]}>
+                {Loadable(EditLoginChannelPage)({})}
+              </ProtectedRoute>
+            ),
+          },
+        ],
       },
       {
         path: "security-policies",

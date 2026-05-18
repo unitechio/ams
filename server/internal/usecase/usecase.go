@@ -1696,6 +1696,23 @@ func (uc *LoginChannelUsecase) List(filters map[string]interface{}, page, pageSi
 	return paginate(data, total, page, pageSize), nil
 }
 
+func (uc *LoginChannelUsecase) GetByID(id uint) (*LoginChannelResponse, error) {
+	items, _, err := uc.repo.List(map[string]interface{}{
+		"page":      1,
+		"page_size": 1000,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range items {
+		if item.ID == id {
+			resp := loginChannelToResponse(item)
+			return &resp, nil
+		}
+	}
+	return nil, errors.New("login channel không tồn tại")
+}
+
 func (uc *LoginChannelUsecase) Create(req *CreateLoginChannelReq) (*LoginChannelResponse, error) {
 	channel := &domain.LoginChannel{
 		Code:                  strings.TrimSpace(req.Code),

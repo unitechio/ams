@@ -273,6 +273,7 @@ func Setup(
 		loginChannels.Use(middleware.RequirePermission(permission.PermissionChannelRead))
 		{
 			loginChannels.GET("", loginChannelH.List)
+			loginChannels.GET("/:id", loginChannelH.Get)
 			loginChannels.POST("",
 				middleware.RequirePermission(permission.PermissionChannelCreate),
 				middleware.RequireStepUp(jwtSvc),

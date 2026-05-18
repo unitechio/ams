@@ -100,7 +100,7 @@ export default function CreateUserPage() {
         title="Tạo người dùng mới"
         subtitle="Khởi tạo tài khoản nhân viên với đầy đủ cấu hình bảo mật và vai trò"
         actions={
-          <Button variant="outline" size="sm" onClick={() => navigate('/users')} className="h-9 rounded-lg border-slate-200">
+          <Button variant="outline" size="sm" onClick={() => navigate('/users')} className="h-9 rounded-lg border-slate-200 dark:border-slate-800">
             <ArrowLeft className="w-4 h-4 mr-1.5" /> Quay lại
           </Button>
         }
@@ -111,12 +111,12 @@ export default function CreateUserPage() {
         <div className="lg:col-span-2 space-y-6">
 
           {/* Basic Info Card */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-50 bg-slate-50/30 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+          <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-2 border-b border-slate-50 bg-slate-50/30 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400">
                 <UserIcon className="w-4 h-4" />
               </div>
-              <h3 className="text-sm font-bold text-slate-800">Thông tin cơ bản</h3>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Thông tin cơ bản</h3>
             </div>
 
             <div className="p-6">
@@ -195,12 +195,12 @@ export default function CreateUserPage() {
           </div>
 
           {/* Roles Selection Card */}
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-50 bg-slate-50/30 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center text-violet-600">
+          <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-2 border-b border-slate-50 bg-slate-50/30 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-50 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400">
                 <ShieldCheck className="w-4 h-4" />
               </div>
-              <h3 className="text-sm font-bold text-slate-800">Gán vai trò hệ thống</h3>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Gán vai trò hệ thống</h3>
             </div>
             <div className="p-6">
               <div className="flex flex-wrap gap-2">
@@ -240,12 +240,12 @@ export default function CreateUserPage() {
 
         {/* Sidebar Config Column */}
         <div className="space-y-6">
-          <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-50 bg-slate-50/30 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+          <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center gap-2 border-b border-slate-50 bg-slate-50/30 px-6 py-4 dark:border-slate-800 dark:bg-slate-950/40">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400">
                 <Lock className="w-4 h-4" />
               </div>
-              <h3 className="text-sm font-bold text-slate-800">Chính sách bảo mật</h3>
+              <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Chính sách bảo mật</h3>
             </div>
 
             <div className="p-6 space-y-6">

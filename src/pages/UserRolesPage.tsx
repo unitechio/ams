@@ -113,24 +113,24 @@ export default function UserRolesPage() {
                 value={userSearch}
                 onChange={e => { setUserSearch(e.target.value); setShowUserDropdown(true); }}
                 onFocus={() => setShowUserDropdown(true)}
-                className="pl-10 h-11 rounded-xl border-gray-100 bg-gray-50/50 focus:bg-white transition-all"
+                className="h-11 rounded-xl border-gray-100 bg-gray-50/50 pl-10 transition-all focus:bg-white dark:border-slate-800 dark:bg-slate-950 dark:focus:bg-slate-900"
               />
 
               {showUserDropdown && users.length > 0 && (
-                <div className="absolute top-full left-0 right-0 z-50 mt-1 bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="absolute top-full left-0 right-0 z-50 mt-1 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-xl animate-in fade-in slide-in-from-top-1 duration-200 dark:border-slate-800 dark:bg-slate-900">
                   <div className="max-h-60 overflow-y-auto">
                     {users.map(u => (
                       <button
                         key={u.id}
                         onClick={() => handleSelectUser(u)}
-                        className="w-full flex items-center gap-3 p-3 hover:bg-emerald-50 transition-colors text-left border-b border-gray-50 last:border-0"
+                        className="flex w-full items-center gap-3 border-b border-gray-50 p-3 text-left transition-colors hover:bg-emerald-50 last:border-0 dark:border-slate-800 dark:hover:bg-emerald-950/20"
                       >
-                        <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-xs font-bold">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300">
                           {u.full_name.charAt(0)}
                         </div>
                         <div>
-                          <p className="text-sm font-bold text-gray-900">{u.id} - {u.full_name}</p>
-                          <p className="text-[10px] text-gray-400 font-mono">@{u.username}</p>
+                          <p className="text-sm font-bold text-gray-900 dark:text-slate-100">{u.id} - {u.full_name}</p>
+                          <p className="font-mono text-[10px] text-gray-400 dark:text-slate-500">@{u.username}</p>
                         </div>
                       </button>
                     ))}
@@ -141,13 +141,13 @@ export default function UserRolesPage() {
           </div>
 
           {selectedUser && (
-            <div className="flex items-center gap-4 p-4 bg-emerald-50/30 rounded-xl border border-emerald-100/50">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shadow-lg shadow-emerald-200">
+            <div className="flex items-center gap-4 rounded-xl border border-emerald-100/50 bg-emerald-50/30 p-4 dark:border-emerald-900/40 dark:bg-emerald-950/20">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-200 dark:shadow-none">
                 <UserCheck className="w-6 h-6" />
               </div>
               <div>
-                <p className="text-sm font-extrabold text-emerald-900 uppercase tracking-tight">{selectedUser.full_name}</p>
-                <p className="text-[11px] text-emerald-600 font-medium">{selectedUser.email} • {selectedUser.status}</p>
+                <p className="text-sm font-extrabold uppercase tracking-tight text-emerald-900 dark:text-emerald-100">{selectedUser.full_name}</p>
+                <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-300">{selectedUser.email} • {selectedUser.status}</p>
               </div>
             </div>
           )}
@@ -156,14 +156,14 @@ export default function UserRolesPage() {
 
       {/* Roles List */}
       {selectedUser ? (
-        <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <div className="p-4 border-b border-gray-50 bg-gray-50/50 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+        <div className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm animate-in fade-in slide-in-from-bottom-4 duration-300 dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center justify-between border-b border-gray-50 bg-gray-50/50 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+            <h3 className="flex items-center gap-2 text-sm font-bold text-gray-900 dark:text-slate-100">
               <Shield className="w-4 h-4 text-emerald-600" /> DANH SÁCH VAI TRÒ HỆ THỐNG
             </h3>
             <div className="flex items-center gap-2">
-              <Badge variant="outline" className="bg-white text-[10px] font-bold">Đã chọn: {selectedRoleIDs.length}</Badge>
-              <Button onClick={handleSave} disabled={saving} size="sm" className="bg-emerald-600 hover:bg-emerald-700 h-8 rounded-lg shadow-md shadow-emerald-50">
+              <Badge variant="outline" className="bg-white text-[10px] font-bold dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">Đã chọn: {selectedRoleIDs.length}</Badge>
+              <Button onClick={handleSave} disabled={saving} size="sm" className="h-8 rounded-lg bg-emerald-600 shadow-md shadow-emerald-50 hover:bg-emerald-700 dark:shadow-none">
                 {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" /> : <Save className="w-3.5 h-3.5 mr-1.5" />}
                 LƯU THIẾT LẬP
               </Button>
@@ -171,7 +171,7 @@ export default function UserRolesPage() {
           </div>
 
           <Table>
-            <TableHeader className="bg-gray-50/30">
+            <TableHeader className="bg-gray-50/30 dark:bg-slate-950/40">
               <TableRow>
                 <TableHead className="w-12 text-center text-[10px] font-black">#</TableHead>
                 <TableHead className="w-16 text-center text-[10px] font-black uppercase">Gán</TableHead>
@@ -185,23 +185,23 @@ export default function UserRolesPage() {
                 const isChecked = selectedRoleIDs.includes(r.id);
                 return (
                   <TableRow key={r.id} className={`group transition-colors ${isChecked ? 'bg-emerald-50/30' : 'hover:bg-gray-50/50'}`}>
-                    <TableCell className="text-center text-xs text-gray-400 font-mono">{(page - 1) * pageSize + idx + 1}</TableCell>
+                    <TableCell className="text-center font-mono text-xs text-gray-400 dark:text-slate-500">{(page - 1) * pageSize + idx + 1}</TableCell>
                     <TableCell className="text-center">
                       <div
                         onClick={() => toggleRole(r.id)}
-                        className={`w-5 h-5 mx-auto rounded-md border-2 flex items-center justify-center cursor-pointer transition-all ${isChecked ? 'bg-emerald-600 border-emerald-600 shadow-sm' : 'border-gray-200 bg-white hover:border-emerald-300'}`}
+                          className={`mx-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded-md border-2 transition-all ${isChecked ? 'border-emerald-600 bg-emerald-600 shadow-sm' : 'border-gray-200 bg-white hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-950'}`}
                       >
                         {isChecked && <ShieldCheck className="w-3.5 h-3.5 text-white" />}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <p className={`text-sm font-bold ${isChecked ? 'text-emerald-900' : 'text-gray-900'}`}>{r.name}</p>
+                      <p className={`text-sm font-bold ${isChecked ? 'text-emerald-900 dark:text-emerald-200' : 'text-gray-900 dark:text-slate-100'}`}>{r.name}</p>
                     </TableCell>
                     <TableCell>
-                      <p className="text-xs text-gray-500 line-clamp-1">{r.description || 'Chưa có mô tả chi tiết cho vai trò này'}</p>
+                      <p className="line-clamp-1 text-xs text-gray-500 dark:text-slate-400">{r.description || 'Chưa có mô tả chi tiết cho vai trò này'}</p>
                     </TableCell>
                     <TableCell className="text-center">
-                      <Badge variant="secondary" className="text-[10px] font-bold bg-emerald-100/50 text-emerald-700 border-emerald-100 px-2 py-0">Khả dụng</Badge>
+                      <Badge variant="secondary" className="border-emerald-100 bg-emerald-100/50 px-2 py-0 text-[10px] font-bold text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300">Khả dụng</Badge>
                     </TableCell>
                   </TableRow>
                 );
@@ -209,17 +209,17 @@ export default function UserRolesPage() {
             </TableBody>
           </Table>
 
-          <div className="border-t border-gray-50 bg-gray-50/20 p-3">
-            <div className="mb-2 flex items-center gap-2 text-[10px] text-gray-400">
+          <div className="border-t border-gray-50 bg-gray-50/20 p-3 dark:border-slate-800 dark:bg-slate-950/30">
+            <div className="mb-2 flex items-center gap-2 text-[10px] text-gray-400 dark:text-slate-500">
               <RefreshCcw className="w-3 h-3" /> Hiển thị {(page - 1) * pageSize + 1} tới {Math.min(page * pageSize, roles.length)} của {roles.length} dữ liệu
             </div>
             <Pagination total={roles.length} page={page} pageSize={pageSize} onPageChange={setPage} />
           </div>
         </div>
       ) : (
-        <div className="h-64 bg-white rounded-2xl border border-dashed border-gray-200 flex flex-col items-center justify-center p-12 text-center">
-          <Users className="w-10 h-10 text-gray-200 mb-4" />
-          <h4 className="text-sm text-gray-400 max-w-xs">Vui lòng chọn người dùng để thiết lập vai trò</h4>
+        <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-gray-200 bg-white p-12 text-center dark:border-slate-800 dark:bg-slate-900">
+          <Users className="mb-4 h-10 w-10 text-gray-200 dark:text-slate-700" />
+          <h4 className="max-w-xs text-sm text-gray-400 dark:text-slate-500">Vui lòng chọn người dùng để thiết lập vai trò</h4>
         </div>
       )}
     </div>
@@ -227,5 +227,5 @@ export default function UserRolesPage() {
 }
 
 function Label({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <label className={`block text-sm font-medium text-gray-700 ${className}`}>{children}</label>;
+  return <label className={`block text-sm font-medium text-gray-700 dark:text-slate-300 ${className}`}>{children}</label>;
 }

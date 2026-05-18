@@ -669,6 +669,19 @@ func (h *LoginChannelHandler) List(c *gin.Context) {
 	ok(c, result)
 }
 
+func (h *LoginChannelHandler) Get(c *gin.Context) {
+	id, valid := parseID(c)
+	if !valid {
+		return
+	}
+	result, err := h.uc.GetByID(id)
+	if err != nil {
+		fail(c, http.StatusNotFound, err.Error())
+		return
+	}
+	ok(c, result)
+}
+
 func (h *LoginChannelHandler) Create(c *gin.Context) {
 	var req usecase.CreateLoginChannelReq
 	if err := c.ShouldBindJSON(&req); err != nil {
