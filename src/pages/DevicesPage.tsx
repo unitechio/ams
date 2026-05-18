@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Laptop, Loader2, RefreshCcw, Search, Shield, Smartphone, Trash2 } from 'lucide-react';
+import { Laptop, Loader2, RefreshCcw, Shield, Smartphone, Trash2 } from 'lucide-react';
+import { AdminCard, AdminLoadingState, AdminSearchField, AdminTableFooter, AdminToolbar } from '@/components/layout/AdminShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Pagination } from '@/components/ui/pagination';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { devicesApi, type DeviceSession, type PaginatedResponse } from '@/lib/api';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { toast } from 'sonner';
@@ -67,10 +69,9 @@ export default function DevicesPage() {
         }
       />
 
-      <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 md:flex-row md:items-center">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+      <AdminCard>
+        <AdminToolbar>
+          <AdminSearchField>
             <Input
               value={search}
               onChange={(e) => {
@@ -80,7 +81,7 @@ export default function DevicesPage() {
               placeholder="Tìm theo user, email, device, IP, client"
               className="pl-9"
             />
-          </div>
+          </AdminSearchField>
           <Select value={clientID} onValueChange={(value) => { setClientID(value); setPage(1); }}>
             <SelectTrigger className="w-full md:w-48">
               <SelectValue placeholder="Client" />
@@ -102,53 +103,52 @@ export default function DevicesPage() {
               <SelectItem value="false">Untrusted</SelectItem>
             </SelectContent>
           </Select>
-        </div>
+        </AdminToolbar>
 
         {loading ? (
-          <div className="flex items-center justify-center py-16">
+          <AdminLoadingState>
             <Loader2 className="h-6 w-6 animate-spin text-emerald-600" />
-          </div>
+          </AdminLoadingState>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-400">
-                    <th className="px-4 py-3">Người dùng</th>
-                    <th className="px-4 py-3">Thiết bị</th>
-                    <th className="px-4 py-3">Client</th>
-                    <th className="px-4 py-3">IP</th>
-                    <th className="px-4 py-3">Trusted</th>
-                    <th className="px-4 py-3">Hoạt động cuối</th>
-                    <th className="px-4 py-3 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Người dùng</TableHead>
+                  <TableHead>Thiết bị</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>IP</TableHead>
+                  <TableHead>Trusted</TableHead>
+                  <TableHead>Hoạt động cuối</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                   {(result?.data || []).map((item) => (
-                    <tr key={item.id} className="border-t border-slate-100">
-                      <td className="px-4 py-3">
+                    <TableRow key={item.id}>
+                      <TableCell>
                         <div className="font-semibold text-slate-800">{item.username}</div>
                         <div className="text-xs text-slate-400">{item.email}</div>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center gap-2">
                           {item.device.toLowerCase().includes('mobile') ? <Smartphone className="h-4 w-4 text-slate-400" /> : <Laptop className="h-4 w-4 text-slate-400" />}
                           <span>{item.device}</span>
                         </div>
-                      </td>
-                      <td className="px-4 py-3">{item.client_id}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{item.ip}</td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>{item.client_id}</TableCell>
+                      <TableCell className="font-mono text-xs">{item.ip}</TableCell>
+                      <TableCell>
                         {item.trusted ? (
-                          <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                          <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400">
                             <Shield className="mr-1 h-3 w-3" /> Trusted
                           </Badge>
                         ) : (
                           <Badge variant="secondary">No</Badge>
                         )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">{item.last_active}</td>
-                      <td className="px-4 py-3 text-right">
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500 dark:text-slate-400">{item.last_active}</TableCell>
+                      <TableCell className="text-right">
                         <Button
                           variant="ghost"
                           size="icon"
@@ -159,26 +159,25 @@ export default function DevicesPage() {
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
                         </Button>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+              </TableBody>
+            </Table>
 
-            {result && result.total_pages > 1 && (
-              <div className="border-t border-slate-100 px-4 py-3">
+            {result && result.total > 0 && (
+              <AdminTableFooter>
                 <Pagination
                   page={result.page}
                   pageSize={result.page_size}
                   total={result.total}
                   onPageChange={setPage}
                 />
-              </div>
+              </AdminTableFooter>
             )}
           </>
         )}
-      </div>
+      </AdminCard>
     </div>
   );
 }

@@ -25,7 +25,7 @@ import {
   Database,
   Fingerprint,
 } from "lucide-react";
-import { AdminLayout } from "@/components/layout/AdminLayout";
+import { AdminCard, AdminLoadingState, AdminSearchField, AdminTableFooter } from "@/components/layout/AdminShell";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -192,9 +192,8 @@ export default function AuditLogPage() {
         />
 
         {/* Search & Main Actions */}
-        <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-wrap items-center justify-between gap-4">
-          <div className="relative w-full sm:w-96">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500" />
+        <AdminCard className="p-4 flex flex-wrap items-center justify-between gap-4">
+          <AdminSearchField className="w-full sm:w-96 flex-none">
             <Input
               placeholder="Tìm nội dung, tài nguyên, ID..."
               value={search}
@@ -204,7 +203,7 @@ export default function AuditLogPage() {
               }}
               className="pl-9 bg-slate-50/50 dark:bg-slate-900 border-slate-100 dark:border-slate-800 focus-visible:ring-emerald-500 h-10 rounded-lg text-sm"
             />
-          </div>
+          </AdminSearchField>
           <div className="flex items-center gap-2">
             <Button
               variant="ghost"
@@ -225,7 +224,7 @@ export default function AuditLogPage() {
               </Button>
             )}
           </div>
-        </div>
+        </AdminCard>
 
         {/* Advanced Filters Panel */}
         {showFilters && (
@@ -291,14 +290,14 @@ export default function AuditLogPage() {
           </div>
         )}
 
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+        <AdminCard className="overflow-hidden">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <AdminLoadingState className="flex-col gap-4 py-20">
               <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
               <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">
                 Đang truy vấn nhật ký...
               </p>
-            </div>
+            </AdminLoadingState>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -391,7 +390,7 @@ export default function AuditLogPage() {
             </div>
           )}
 
-          <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/20">
+          <AdminTableFooter className="bg-slate-50/40 dark:bg-slate-800/20">
             <Pagination
               total={result?.total ?? 0}
               page={page}
@@ -399,8 +398,8 @@ export default function AuditLogPage() {
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
             />
-          </div>
-        </div>
+          </AdminTableFooter>
+        </AdminCard>
       </div>
 
       {/* ─── Log Detail Dialog ─────────────────────────────────────────────── */}

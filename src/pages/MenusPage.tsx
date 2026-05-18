@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import * as LucideIcons from 'lucide-react';
 import {
-  LayoutDashboard, Plus, Search, Pencil, Trash2,
+  LayoutDashboard, Plus, Pencil, Trash2,
   Loader2, ChevronDown, ChevronRight, FolderOpen,
   Link2, Save, X
 } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
+import { AdminCard, AdminLoadingState, AdminSearchField, AdminTableFooter, AdminToolbar } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -366,16 +367,15 @@ export default function MenusPage() {
         />
 
         {/* Toolbar */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+        <AdminToolbar className="rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <AdminSearchField className="max-w-sm">
             <Input
               placeholder="Tìm kiếm menu..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               className="pl-9 h-9 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm"
             />
-          </div>
+          </AdminSearchField>
           <div className="flex gap-2 sm:ml-auto">
             <Button
               variant="outline"
@@ -386,18 +386,18 @@ export default function MenusPage() {
               Mở tất cả
             </Button>
           </div>
-        </div>
+        </AdminToolbar>
 
         {/* Table Area */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+          <AdminLoadingState className="flex-col gap-3 py-24 rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             <Loader2 className="w-7 h-7 text-emerald-600 animate-spin" />
             <p className="text-sm text-slate-400 dark:text-slate-500">Đang tải cấu trúc menu...</p>
-          </div>
+          </AdminLoadingState>
         ) : filteredRoots.length === 0 ? (
           <EmptyState onAdd={() => openCreate()} />
         ) : (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+          <AdminCard className="overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
@@ -536,7 +536,7 @@ export default function MenusPage() {
             </div>
 
             {/* Footer Summary & Pagination */}
-            <div className="px-5 py-3.5 border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 space-y-4">
+            <AdminTableFooter className="px-5 py-3.5 bg-slate-50/60 dark:bg-slate-800/40 space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
                   Hiển thị <span className="text-slate-700 dark:text-slate-300">{menus.length}</span> danh mục menu hệ thống
@@ -547,15 +547,15 @@ export default function MenusPage() {
                   <span>{menus.length - rootMenus.length} Children</span>
                 </div>
               </div>
-              {/* <Pagination
+              <Pagination
                 total={total}
                 page={page}
                 pageSize={pageSize}
                 onPageChange={setPage}
                 onPageSizeChange={setPageSize}
-              /> */}
-            </div>
-          </div>
+              />
+            </AdminTableFooter>
+          </AdminCard>
         )}
       </div>
 

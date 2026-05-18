@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Pencil, Trash2, Key, Mail, Phone, ShieldCheck, ShieldAlert, Save, Lock, Unlock, Loader2, Plus, Search, RefreshCcw, AlertCircle, Users } from 'lucide-react';
+import { Pencil, Trash2, Key, Mail, Phone, ShieldCheck, ShieldAlert, Save, Lock, Unlock, Loader2, Plus, RefreshCcw, AlertCircle, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { AdminCard, AdminLoadingState, AdminSearchField, AdminTableFooter, AdminToolbar } from '@/components/layout/AdminShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -185,12 +186,11 @@ export default function UsersPage() {
         </div>
 
         {/* Table card */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+        <AdminCard className="overflow-hidden">
 
           {/* Toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 dark:text-slate-500 pointer-events-none" />
+          <AdminToolbar>
+            <AdminSearchField className="max-w-sm">
               <Input
                 placeholder="Tìm theo tên, email, username..."
                 value={search}
@@ -198,14 +198,14 @@ export default function UsersPage() {
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
                 className="pl-9 h-9 rounded-lg border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950 text-sm"
               />
-            </div>
+            </AdminSearchField>
             <div className="flex items-center gap-2 sm:ml-auto">
               <Button variant="ghost" size="icon" onClick={fetchData}
                 className="h-9 w-9 rounded-lg text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800">
                 <RefreshCcw className="w-4 h-4" />
               </Button>
             </div>
-          </div>
+          </AdminToolbar>
 
           {/* Content */}
           {error ? (
@@ -222,10 +222,10 @@ export default function UsersPage() {
               </Button>
             </div>
           ) : loading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <AdminLoadingState className="flex-col gap-3 py-20">
               <Loader2 className="w-7 h-7 text-emerald-600 animate-spin" />
-              <p className="text-sm text-slate-400">Đang tải dữ liệu...</p>
-            </div>
+              <p className="text-sm text-slate-400 dark:text-slate-500">Đang tải dữ liệu...</p>
+            </AdminLoadingState>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full table-fixed text-sm">
@@ -444,7 +444,7 @@ export default function UsersPage() {
           )}
 
           {/* Pagination */}
-          <div className="px-4 py-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-800/20">
+          <AdminTableFooter className="bg-slate-50/40 dark:bg-slate-800/20">
             <Pagination
               total={result?.total ?? 0}
               page={page}
@@ -452,8 +452,8 @@ export default function UsersPage() {
               onPageChange={setPage}
               onPageSizeChange={setPageSize}
             />
-          </div>
-        </div>
+          </AdminTableFooter>
+        </AdminCard>
       </div>
 
       {/* ─── Reset Password Dialog ───────────────────────────────────────────── */}
