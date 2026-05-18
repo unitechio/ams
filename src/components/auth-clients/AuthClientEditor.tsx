@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AdminFormNote, AdminFormSection, AdminFormSurface } from '@/components/layout/AdminFormShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { clientsApi, isStepUpRequiredError, loginChannelsApi, referenceOptionsApi, serviceAccountsApi, type LoginChannel, type ReferenceOption } from '@/lib/api';
 
@@ -83,18 +84,6 @@ function buildPayload(form: typeof DEFAULT_FORM, mode: Mode) {
     trusted_types: isService ? ['server'] : split(form.trusted_types),
     tags: split(form.tags),
   };
-}
-
-function EditorSection({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
-        {description ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{children}</div>
-    </section>
-  );
 }
 
 export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: number }) {
@@ -299,10 +288,10 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
         }
       />
 
-      <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-emerald-50/40 to-teal-50/30 p-4 shadow-sm dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      <AdminFormSurface className="from-white via-emerald-50/40 to-teal-50/30">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-6">
-            <EditorSection title="Định danh Client" description="Thông tin nhận diện chính của application hoặc service đang xin token.">
+            <AdminFormSection title="Định danh Client" description="Thông tin nhận diện chính của application hoặc service đang xin token.">
               <div>
                 <Label>Client Template</Label>
                 <Select value={form.client_template} onValueChange={applyTemplate}>
@@ -358,20 +347,20 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
                 </Select>
               </div>
               <div className="md:col-span-2"><Label>Mô tả</Label><Input value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-            </EditorSection>
+            </AdminFormSection>
 
-            <EditorSection title="Token & Security" description="Điều khiển grant type, audience, redirect URI và trusted type.">
+            <AdminFormSection title="Token & Security" description="Điều khiển grant type, audience, redirect URI và trusted type.">
               <div><Label>Grant Types</Label><Input value={form.grant_types} disabled={isServiceMode} onChange={(e) => setForm(f => ({ ...f, grant_types: e.target.value }))} placeholder="authorization_code,refresh_token" /></div>
               <div><Label>Audiences</Label><Input value={form.audiences} onChange={(e) => setForm(f => ({ ...f, audiences: e.target.value }))} placeholder="payment-api,parking-api" /></div>
               {!isServiceMode && <div><Label>Redirect URIs</Label><Input value={form.redirect_uris} onChange={(e) => setForm(f => ({ ...f, redirect_uris: e.target.value }))} placeholder="https://app/callback,myapp://oauth/callback" /></div>}
               <div><Label>Trusted Types</Label><Input value={form.trusted_types} disabled={isServiceMode} onChange={(e) => setForm(f => ({ ...f, trusted_types: e.target.value }))} placeholder="browser,mobile,server" /></div>
               <div><Label>Tags</Label><Input value={form.tags} onChange={(e) => setForm(f => ({ ...f, tags: e.target.value }))} placeholder="crm,partner,prod" /></div>
               <div><Label>Client Secret</Label><Input value={form.client_secret} disabled={!isServiceMode && form.public} onChange={(e) => setForm(f => ({ ...f, client_secret: e.target.value }))} placeholder={(!isServiceMode && form.public) ? 'Public client không dùng secret' : 'Secret sẽ tự sinh nếu để trống'} /></div>
-            </EditorSection>
+            </AdminFormSection>
           </div>
 
           <div className="space-y-6">
-            <EditorSection title="Channel Mapping" description="Kênh đăng nhập được phép dùng client này.">
+            <AdminFormSection title="Channel Mapping" description="Kênh đăng nhập được phép dùng client này.">
               {isServiceMode ? (
                 <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                   Service account cố định channel `service`.
@@ -391,9 +380,9 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
                   ))}
                 </div>
               )}
-            </EditorSection>
+            </AdminFormSection>
 
-            <EditorSection title="Boundary" description="Public/confidential boundary và các cờ bảo mật liên quan.">
+            <AdminFormSection title="Boundary" description="Public/confidential boundary và các cờ bảo mật liên quan.">
               <div className="md:col-span-2 grid grid-cols-1 gap-3 text-sm">
                 {!isServiceMode && (
                   <>
@@ -416,9 +405,9 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
                   Active
                 </label>
               </div>
-            </EditorSection>
+            </AdminFormSection>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <AdminFormNote>
               <div className="flex items-start gap-3">
                 {isServiceMode ? <Bot className="mt-0.5 h-5 w-5 text-emerald-500" /> : <Globe className="mt-0.5 h-5 w-5 text-emerald-500" />}
                 <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
@@ -434,10 +423,10 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
                   </div>
                 </div>
               </div>
-            </section>
+            </AdminFormNote>
           </div>
         </div>
-      </div>
+      </AdminFormSurface>
     </div>
   );
 }

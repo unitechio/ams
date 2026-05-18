@@ -41,6 +41,7 @@ const EditSecurityPolicyPage = lazy(() => import("@/pages/EditSecurityPolicyPage
 const ReferenceOptionsPage = lazy(() => import("@/pages/ReferenceOptionsPage"));
 const CreateReferenceOptionPage = lazy(() => import("@/pages/CreateReferenceOptionPage"));
 const EditReferenceOptionPage = lazy(() => import("@/pages/EditReferenceOptionPage"));
+const DocsPage = lazy(() => import("@/pages/DocsPage"));
 const OAuthCallbackPage = lazy(() => import("@/pages/OAuthCallbackPage"));
 const SSOCallbackPage = lazy(() => import("@/pages/SSOCallbackPage"));
 
@@ -68,6 +69,10 @@ export const routes: RouteObject[] = [
       {
         path: "settings",
         element: Loadable(SettingsPage)({}),
+      },
+      {
+        path: "docs",
+        element: Loadable(DocsPage)({}),
       },
       // User Management
       {

@@ -3,6 +3,7 @@ import { ArrowLeft, Loader2, Save } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
+import { AdminFormSection, AdminFormSurface } from '@/components/layout/AdminFormShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -113,8 +114,8 @@ export function ReferenceOptionEditor({ optionId }: { optionId?: number }) {
         }
       />
 
-      <section className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-amber-50/35 to-sky-50/30 p-5 shadow-sm dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <AdminFormSurface className="from-white via-amber-50/35 to-sky-50/30">
+        <AdminFormSection title="Reference Option Detail" description="Quản trị catalog DB-backed cho dropdown runtime, template metadata và option mở rộng trong tương lai.">
           <div><Label>Option Group</Label><Input value={form.option_group} onChange={(e) => setForm(f => ({ ...f, option_group: e.target.value }))} /></div>
           <div><Label>Value</Label><Input value={form.value} onChange={(e) => setForm(f => ({ ...f, value: e.target.value }))} /></div>
           <div><Label>Label</Label><Input value={form.label} onChange={(e) => setForm(f => ({ ...f, label: e.target.value }))} /></div>
@@ -134,8 +135,8 @@ export function ReferenceOptionEditor({ optionId }: { optionId?: number }) {
               Active
             </label>
           </div>
-        </div>
-      </section>
+        </AdminFormSection>
+      </AdminFormSurface>
     </div>
   );
 }

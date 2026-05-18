@@ -84,6 +84,7 @@ func SyncMenus(db *gorm.DB) {
 		{ID: 13, Title: "Login Channels", URL: "/login-channels", SortOrder: 762, Icon: "Workflow", PermissionCode: string(permission.PermissionChannelRead), ParentID: &u20},
 		{ID: 14, Title: "Security Policies", URL: "/security-policies", SortOrder: 761, Icon: "ShieldAlert", PermissionCode: string(permission.PermissionPolicyRead), ParentID: &u20},
 		{ID: 15, Title: "Reference Options", URL: "/reference-options", SortOrder: 759, Icon: "ListTree", PermissionCode: string(permission.PermissionOptionRead), ParentID: &u20},
+		{ID: 16, Title: "Docs & Guides", URL: "/docs", SortOrder: 758, Icon: "BookOpen", PermissionCode: "", ParentID: &u20},
 		{ID: 11, Title: "Service Accounts", URL: "/service-accounts", SortOrder: 760, Icon: "Bot", PermissionCode: string(permission.PermissionServiceRead), ParentID: &u20},
 
 		{ID: 30, Title: "Nhật ký", URL: "#", SortOrder: 500, Icon: "FileText", PermissionCode: ""},

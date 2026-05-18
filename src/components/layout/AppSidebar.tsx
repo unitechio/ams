@@ -60,7 +60,7 @@ export function AppSidebar({ collapsed, onToggle, navItems, loadingNav }: AppSid
       )}
     >
       {/* Logo */}
-      <div className={cn(
+      <div data-tour="sidebar-brand" className={cn(
         'flex items-center h-[57px] shrink-0 border-b border-slate-100 dark:border-slate-800 px-3',
         collapsed ? 'justify-center' : 'gap-2.5'
       )}>
@@ -79,7 +79,7 @@ export function AppSidebar({ collapsed, onToggle, navItems, loadingNav }: AppSid
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-2 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-0.5">
+      <nav data-tour="sidebar-nav" className="flex-1 px-2 py-2 overflow-y-auto overflow-x-hidden custom-scrollbar space-y-0.5">
         {loadingNav && !collapsed && (
           <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-400">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-500 shrink-0" />

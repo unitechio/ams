@@ -3,6 +3,7 @@ import { ArrowLeft, Loader2, Save, ShieldCheck, Workflow } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
+import { AdminFormNote, AdminFormSection, AdminFormSurface } from '@/components/layout/AdminFormShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,18 +23,6 @@ const DEFAULT_FORM = {
   session_ttl_minutes: 1440,
   active: true,
 };
-
-function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
-        {description ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{children}</div>
-    </section>
-  );
-}
 
 export function LoginChannelEditor({ channelId }: { channelId?: number }) {
   const navigate = useNavigate();
@@ -137,10 +126,10 @@ export function LoginChannelEditor({ channelId }: { channelId?: number }) {
         }
       />
 
-      <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-emerald-50/40 to-sky-50/30 p-4 shadow-sm dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      <AdminFormSurface className="from-white via-emerald-50/40 to-sky-50/30">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-6">
-            <Section title="Định danh Channel" description="Một channel đại diện cho bề mặt đăng nhập như web, mobile, kiosk, partner.">
+            <AdminFormSection title="Định danh Channel" description="Một channel đại diện cho bề mặt đăng nhập như web, mobile, kiosk, partner.">
               <div><Label>Code</Label><Input value={form.code} onChange={(e) => setForm(f => ({ ...f, code: e.target.value }))} placeholder="web / mobile / partner" /></div>
               <div><Label>Tên hiển thị</Label><Input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} /></div>
               <div className="md:col-span-2"><Label>Mô tả</Label><Input value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))} /></div>
@@ -161,9 +150,9 @@ export function LoginChannelEditor({ channelId }: { channelId?: number }) {
                   Active
                 </label>
               </div>
-            </Section>
+            </AdminFormSection>
 
-            <Section title="Auth Runtime" description="Điều khiển phương thức đăng nhập được phép và các TTL áp theo channel.">
+            <AdminFormSection title="Auth Runtime" description="Điều khiển phương thức đăng nhập được phép và các TTL áp theo channel.">
               <div><Label>Trusted Device TTL (hours)</Label><Input type="number" value={form.trusted_device_ttl_hours} onChange={(e) => setForm(f => ({ ...f, trusted_device_ttl_hours: Number(e.target.value) || 0 }))} /></div>
               <div><Label>Session TTL (minutes)</Label><Input type="number" value={form.session_ttl_minutes} onChange={(e) => setForm(f => ({ ...f, session_ttl_minutes: Number(e.target.value) || 0 }))} /></div>
               <div className="md:col-span-2 flex flex-wrap gap-3 text-sm">
@@ -171,11 +160,11 @@ export function LoginChannelEditor({ channelId }: { channelId?: number }) {
                 <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.allow_password} onChange={(e) => setForm(f => ({ ...f, allow_password: e.target.checked }))} /> Allow password</label>
                 <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.allow_sso} onChange={(e) => setForm(f => ({ ...f, allow_sso: e.target.checked }))} /> Allow SSO</label>
               </div>
-            </Section>
+            </AdminFormSection>
           </div>
 
           <div className="space-y-6">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <AdminFormNote>
               <div className="flex items-start gap-3">
                 <Workflow className="mt-0.5 h-5 w-5 text-emerald-500" />
                 <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
@@ -189,9 +178,9 @@ export function LoginChannelEditor({ channelId }: { channelId?: number }) {
                   </div>
                 </div>
               </div>
-            </section>
+            </AdminFormNote>
 
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <AdminFormNote>
               <div className="flex items-start gap-3">
                 <ShieldCheck className="mt-0.5 h-5 w-5 text-sky-500" />
                 <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
@@ -200,10 +189,10 @@ export function LoginChannelEditor({ channelId }: { channelId?: number }) {
                   <p>Policy MFA/TTL có thể override tiếp bằng security policy theo `client_channel` nếu cần.</p>
                 </div>
               </div>
-            </section>
+            </AdminFormNote>
           </div>
         </div>
-      </div>
+      </AdminFormSurface>
     </div>
   );
 }

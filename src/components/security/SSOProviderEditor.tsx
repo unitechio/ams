@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { AdminFormSection, AdminFormSurface } from '@/components/layout/AdminFormShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,15 +27,6 @@ const DEFAULT_FORM = {
   allow_auto_provision: true,
   icon: 'Shield',
 };
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <h2 className="mb-4 text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{children}</div>
-    </section>
-  );
-}
 
 export function SSOProviderEditor({ providerId }: { providerId?: number }) {
   const navigate = useNavigate();
@@ -139,9 +131,9 @@ export function SSOProviderEditor({ providerId }: { providerId?: number }) {
         }
       />
 
-      <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-sky-50/40 to-emerald-50/30 p-4 shadow-sm dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      <AdminFormSurface className="from-white via-sky-50/40 to-emerald-50/30">
         <div className="space-y-6">
-          <Section title="Định danh Provider">
+          <AdminFormSection title="Định danh Provider">
             <div><Label>Provider ID</Label><Input value={form.provider_id} onChange={(e) => setForm(f => ({ ...f, provider_id: e.target.value }))} /></div>
             <div><Label>Tên hiển thị</Label><Input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} /></div>
             <div>
@@ -156,9 +148,9 @@ export function SSOProviderEditor({ providerId }: { providerId?: number }) {
               </Select>
             </div>
             <div><Label>Icon</Label><Input value={form.icon} onChange={(e) => setForm(f => ({ ...f, icon: e.target.value }))} /></div>
-          </Section>
+          </AdminFormSection>
 
-          <Section title="Identity Provider Configuration">
+          <AdminFormSection title="Identity Provider Configuration">
             <div><Label>Client ID</Label><Input value={form.client_id} onChange={(e) => setForm(f => ({ ...f, client_id: e.target.value }))} /></div>
             <div><Label>Client Secret</Label><Input value={form.client_secret} onChange={(e) => setForm(f => ({ ...f, client_secret: e.target.value }))} /></div>
             {isOIDC ? (
@@ -176,9 +168,9 @@ export function SSOProviderEditor({ providerId }: { providerId?: number }) {
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.enabled} onChange={(e) => setForm(f => ({ ...f, enabled: e.target.checked }))} /> Enabled</label>
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.allow_auto_provision} onChange={(e) => setForm(f => ({ ...f, allow_auto_provision: e.target.checked }))} /> Auto provision user</label>
             </div>
-          </Section>
+          </AdminFormSection>
         </div>
-      </div>
+      </AdminFormSurface>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AdminFormNote, AdminFormSection, AdminFormSurface } from '@/components/layout/AdminFormShell';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { clientsApi, isStepUpRequiredError, loginChannelsApi, referenceOptionsApi, securityPoliciesApi, type AuthClient, type LoginChannel, type ReferenceOption } from '@/lib/api';
 
@@ -43,18 +44,6 @@ const DEFAULT_FORM = {
     require_special: true,
   },
 };
-
-function EditorSection({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="mb-4">
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
-        {description ? <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{description}</p> : null}
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">{children}</div>
-    </section>
-  );
-}
 
 export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
   const navigate = useNavigate();
@@ -199,10 +188,10 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
         }
       />
 
-      <div className="rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-sky-50/35 to-emerald-50/25 p-4 shadow-sm dark:border-slate-800 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950">
+      <AdminFormSurface className="from-white via-sky-50/35 to-emerald-50/25">
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.05fr_0.95fr]">
           <div className="space-y-6">
-            <EditorSection title="Định danh Policy" description="Thông tin identity và scope của policy.">
+            <AdminFormSection title="Định danh Policy" description="Thông tin identity và scope của policy.">
               <div><Label>Code</Label><Input value={form.code} onChange={(e) => setForm(f => ({ ...f, code: e.target.value }))} placeholder="global-auth-default" /></div>
               <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} /></div>
               <div>
@@ -274,10 +263,10 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
                   Active
                 </label>
               </div>
-            </EditorSection>
+            </AdminFormSection>
 
             {isAuthPolicy ? (
-              <EditorSection title="Auth & Session Runtime" description="Rule cho MFA, password login, session TTL, refresh TTL và brute-force rate limit.">
+              <AdminFormSection title="Auth & Session Runtime" description="Rule cho MFA, password login, session TTL, refresh TTL và brute-force rate limit.">
                 <div className="md:col-span-2 flex flex-wrap gap-3 text-sm">
                   <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.config.require_mfa} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, require_mfa: e.target.checked } }))} /> Require MFA</label>
                   <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.config.allow_password} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, allow_password: e.target.checked } }))} /> Allow password</label>
@@ -293,18 +282,18 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
                 <div><Label>Identity Max Attempts</Label><Input type="number" value={form.config.login_identity_max_attempts} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_identity_max_attempts: Number(e.target.value || 0) } }))} /></div>
                 <div><Label>Identity Window (minutes)</Label><Input type="number" value={form.config.login_identity_window_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_identity_window_minutes: Number(e.target.value || 0) } }))} /></div>
                 <div><Label>Identity Block (minutes)</Label><Input type="number" value={form.config.login_identity_block_minutes} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, login_identity_block_minutes: Number(e.target.value || 0) } }))} /></div>
-              </EditorSection>
+              </AdminFormSection>
             ) : isStepUpPolicy ? (
-              <EditorSection title="Step-up Action Rule" description="Bật/tắt step-up cho action nhạy cảm đã chọn.">
+              <AdminFormSection title="Step-up Action Rule" description="Bật/tắt step-up cho action nhạy cảm đã chọn.">
                 <div className="md:col-span-2">
                   <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm dark:border-slate-800">
                     <input type="checkbox" checked={form.config.require_step_up} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, require_step_up: e.target.checked } }))} />
                     Require step-up for action
                   </label>
                 </div>
-              </EditorSection>
+              </AdminFormSection>
             ) : (
-              <EditorSection title="Password Policy" description="Yêu cầu độ phức tạp và độ dài mật khẩu cho user lifecycle.">
+              <AdminFormSection title="Password Policy" description="Yêu cầu độ phức tạp và độ dài mật khẩu cho user lifecycle.">
                 <div><Label>Password Min Length</Label><Input type="number" value={form.config.password_min_length} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, password_min_length: Number(e.target.value || 0) } }))} /></div>
                 <div className="md:col-span-2 flex flex-wrap gap-3 text-sm">
                   <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.config.require_upper} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, require_upper: e.target.checked } }))} /> Upper</label>
@@ -312,12 +301,12 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
                   <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.config.require_number} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, require_number: e.target.checked } }))} /> Number</label>
                   <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.config.require_special} onChange={(e) => setForm(f => ({ ...f, config: { ...f.config, require_special: e.target.checked } }))} /> Special</label>
                 </div>
-              </EditorSection>
+              </AdminFormSection>
             )}
           </div>
 
           <div className="space-y-6">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <AdminFormNote>
               <div className="flex items-start gap-3">
                 <ShieldAlert className="mt-0.5 h-5 w-5 text-emerald-500" />
                 <div className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
@@ -332,10 +321,10 @@ export function SecurityPolicyEditor({ policyId }: { policyId?: number }) {
                   </div>
                 </div>
               </div>
-            </section>
+            </AdminFormNote>
           </div>
         </div>
-      </div>
+      </AdminFormSurface>
     </div>
   );
 }

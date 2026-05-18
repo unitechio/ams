@@ -17,7 +17,7 @@ export function AppHeader() {
       </div>
 
       {/* Right: actions */}
-      <div className="flex items-center gap-1 shrink-0 ml-4">
+      <div data-tour="header-actions" className="flex items-center gap-1 shrink-0 ml-4">
         {/* Theme Toggle */}
         <ThemeToggle />
 
