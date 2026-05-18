@@ -102,6 +102,23 @@ cd server
 go run ./cmd/server
 ```
 
+## Runtime production
+
+Backend hiện hỗ trợ runtime production kiểu single-binary:
+
+- embed SPA từ `server/web/dist`
+- `GET /health`
+- `GET /readyz`
+- `GET /metrics`
+- `GET /debug/pprof/*` khi `ENABLE_PPROF=true`
+- graceful shutdown
+- structured logging
+- HTTP timeout config bằng env
+
+Xem full production deployment guide tại:
+
+- [D:/Code/OWNER/ams/deploy/README.md](/D:/Code/OWNER/ams/deploy/README.md)
+
 ## Ghi chú schema
 
 - GORM `AutoMigrate` đang là nguồn migrate thực tế khi app khởi động.

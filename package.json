@@ -5,7 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "npm run build:frontend",
+    "build:frontend": "tsc -b && vite build",
+    "build:frontend:development": "tsc -b && vite build --mode development",
+    "build:frontend:staging": "tsc -b && vite build --mode staging",
+    "build:frontend:production": "tsc -b && vite build --mode production",
+    "sync:web": "node ./scripts/sync-web.mjs",
+    "embed:web": "npm run build:frontend && npm run sync:web",
+    "embed:web:development": "npm run build:frontend:development && npm run sync:web",
+    "embed:web:staging": "npm run build:frontend:staging && npm run sync:web",
+    "embed:web:production": "npm run build:frontend:production && npm run sync:web",
     "lint": "eslint .",
     "preview": "vite preview"
   },

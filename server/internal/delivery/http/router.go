@@ -1,6 +1,7 @@
 package http
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -33,24 +34,26 @@ func Setup(
 	permH *PermissionHandler,
 	menuH *MenuHandler,
 	logH *LogHandler,
+	allowOrigins []string,
+	logger *slog.Logger,
+	enableSecurityHeaders bool,
+	contentSecurityPolicy string,
 ) *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
+	for _, mw := range DefaultMiddlewares(logger, enableSecurityHeaders, contentSecurityPolicy) {
+		r.Use(mw)
+	}
 	r.SetTrustedProxies(nil)
 
 	// ── CORS ──────────────────────────────────────────────────────────────────
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173", "http://localhost:3000"},
+		AllowOrigins:     allowOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Step-Up-Token", "X-Request-ID"},
+		ExposeHeaders:    []string{"Content-Length", "X-Request-ID"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-
-	// ── Health ────────────────────────────────────────────────────────────────
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "ok", "version": "1.0.0"})
-	})
 
 	api := r.Group("/api/v1")
 

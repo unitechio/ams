@@ -1,0 +1,12 @@
+.git
+.github
+node_modules
+dist
+coverage
+*.log
+server/server.exe
+server/bin
+server/web/dist/assets
+deploy/.env
+deploy/env/*.local
+README.local.md

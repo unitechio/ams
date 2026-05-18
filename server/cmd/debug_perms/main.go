@@ -10,7 +10,7 @@ import (
 
 func main() {
 	cfg := config.Load()
-	db := persistence.Connect(cfg.Database.DSN)
+	db := persistence.Connect(cfg.Database)
 
 	// Check superadmin user
 	var user persistence.GormUser

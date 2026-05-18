@@ -1,28 +1,55 @@
 // main.go is the composition root — wires all dependencies together.
-// No business logic lives here; only dependency injection.
+// No business logic lives here; only dependency injection and runtime setup.
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
-	"log"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/owner/auth-server/internal/config"
 	delivery "github.com/owner/auth-server/internal/delivery/http"
 	"github.com/owner/auth-server/internal/infrastructure/persistence"
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
 	"github.com/owner/auth-server/internal/usecase"
+	webassets "github.com/owner/auth-server/web"
+)
+
+var (
+	version = "dev"
+	commit  = "local"
+	date    = "unknown"
 )
 
 func main() {
-	// ── Config ────────────────────────────────────────────────────────────────
 	cfg := config.Load()
-	log.Printf("🚀 Starting Auth Server [%s] on :%s", cfg.Server.Env, cfg.Server.Port)
+	setTimezone(cfg.Server.Timezone)
+	logger := buildLogger(cfg.Server.Env)
 
-	// ── Infrastructure ────────────────────────────────────────────────────────
-	db := persistence.Connect(cfg.Database.DSN)
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		runHealthcheck(cfg, logger)
+		return
+	}
+
+	logger.Info("starting auth server",
+		slog.String("env", cfg.Server.Env),
+		slog.String("host", cfg.Server.Host),
+		slog.String("port", cfg.Server.Port),
+		slog.String("version", version),
+		slog.String("commit", commit),
+		slog.String("build_date", date),
+	)
+
+	db := persistence.Connect(cfg.Database)
 	persistence.Migrate(db)
 
-	// ── Repositories ──────────────────────────────────────────────────────────
 	userRepo := persistence.NewGormUserRepository(db)
 	roleRepo := persistence.NewGormRoleRepository(db)
 	permRepo := persistence.NewGormPermissionRepository(db)
@@ -36,30 +63,21 @@ func main() {
 	auditRepo := persistence.NewGormAuditLogRepository(db)
 	authHistRepo := persistence.NewGormAuthHistoryRepository(db)
 
-	// ── Sync permission constants → DB (idempotent on every start) ───────────
 	permRepo.SyncFromRegistry()
 	persistence.SyncMenus(db)
 	persistence.SyncAuthClients(db)
 	persistence.SyncLoginChannels(db)
 	persistence.SyncSecurityPolicies(db)
 	persistence.SyncReferenceOptions(db)
-
-	// ── Seed initial data (only if DB is empty) ───────────────────────────────
 	persistence.Seed(db, permRepo)
 
-	// ── JWT service ───────────────────────────────────────────────────────────
 	jwtSvc := jwtpkg.NewService(
 		cfg.JWT.Secret,
 		cfg.JWT.AccessTokenTTL,
 		cfg.JWT.RefreshTokenTTL,
 	)
-
-	// ── Permission Loader (middleware dependency) ─────────────────────────────
-	// Loads FRESH permissions from DB on every authenticated request.
-	// NEVER trusts stale permissions embedded in JWT.
 	permLoader := persistence.NewPermLoader(db)
 
-	// ── Usecases ──────────────────────────────────────────────────────────────
 	authUC := usecase.NewAuthUsecase(userRepo, tokenRepo, clientRepo, loginChannelRepo, securityPolicyRepo, permRepo, authHistRepo, jwtSvc, ssoProviderRepo)
 	userUC := usecase.NewUserUsecase(userRepo, tokenRepo, securityPolicyRepo)
 	clientUC := usecase.NewClientUsecase(clientRepo, loginChannelRepo)
@@ -72,7 +90,6 @@ func main() {
 	menuUC := usecase.NewMenuUsecase(menuRepo)
 	logUC := usecase.NewLogUsecase(auditRepo, authHistRepo)
 
-	// ── HTTP Handlers ─────────────────────────────────────────────────────────
 	authHandler := delivery.NewAuthHandler(authUC)
 	userHandler := delivery.NewUserHandler(userUC)
 	clientHandler := delivery.NewClientHandler(clientUC)
@@ -85,7 +102,6 @@ func main() {
 	menuHandler := delivery.NewMenuHandler(menuUC)
 	logHandler := delivery.NewLogHandler(logUC)
 
-	// ── Router ────────────────────────────────────────────────────────────────
 	engine := delivery.Setup(
 		jwtSvc,
 		permLoader,
@@ -102,12 +118,127 @@ func main() {
 		permHandler,
 		menuHandler,
 		logHandler,
+		cfg.Server.AllowOrigins,
+		logger,
+		cfg.Server.EnableSecurityHead,
+		cfg.Server.ContentSecurity,
 	)
 
-	// ── Start server ──────────────────────────────────────────────────────────
-	addr := fmt.Sprintf(":%s", cfg.Server.Port)
-	log.Printf("✅ Server listening on %s", addr)
-	if err := engine.Run(addr); err != nil {
-		log.Fatalf("❌ Server failed: %v", err)
+	sqlDB, err := db.DB()
+	if err != nil {
+		logger.Error("failed to access sql db", slog.Any("error", err))
+		os.Exit(1)
+	}
+
+	delivery.AttachOperationalRoutes(engine, delivery.OperationalOptions{
+		Version:         version,
+		Environment:     cfg.Server.Env,
+		EnableMetrics:   cfg.Server.EnableMetrics,
+		EnablePprof:     cfg.Server.EnablePprof,
+		EnableSecurity:  cfg.Server.EnableSecurityHead,
+		ContentSecurity: cfg.Server.ContentSecurity,
+		Logger:          logger,
+		ReadinessChecker: delivery.ReadinessChain(
+			delivery.NamedCheck("postgres", func() error {
+				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				return sqlDB.PingContext(ctx)
+			}),
+			delivery.NamedCheck("redis", redisDialCheck(cfg.Redis.Addr)),
+		),
+	})
+	delivery.AttachSPA(engine, webassets.FS())
+
+	addr := net.JoinHostPort(cfg.Server.Host, cfg.Server.Port)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           engine,
+		ReadHeaderTimeout: cfg.Server.ReadHeaderTimeout,
+		ReadTimeout:       cfg.Server.ReadTimeout,
+		WriteTimeout:      cfg.Server.WriteTimeout,
+		IdleTimeout:       cfg.Server.IdleTimeout,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		logger.Info("http server listening", slog.String("addr", addr))
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	stopCh := make(chan os.Signal, 1)
+	signal.Notify(stopCh, syscall.SIGINT, syscall.SIGTERM)
+
+	select {
+	case err := <-errCh:
+		logger.Error("http server failed", slog.Any("error", err))
+		os.Exit(1)
+	case sig := <-stopCh:
+		logger.Info("shutdown signal received", slog.String("signal", sig.String()))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.ShutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Error("graceful shutdown failed", slog.Any("error", err))
+		if closeErr := srv.Close(); closeErr != nil {
+			logger.Error("forced close failed", slog.Any("error", closeErr))
+		}
+		os.Exit(1)
+	}
+	logger.Info("server stopped cleanly")
+}
+
+func buildLogger(env string) *slog.Logger {
+	opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+	if env == "production" || env == "staging" {
+		return slog.New(slog.NewJSONHandler(os.Stdout, opts))
+	}
+	return slog.New(slog.NewTextHandler(os.Stdout, opts))
+}
+
+func setTimezone(name string) {
+	if name == "" {
+		return
+	}
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		return
+	}
+	time.Local = loc
+}
+
+func runHealthcheck(cfg *config.Config, logger *slog.Logger) {
+	url := fmt.Sprintf("http://127.0.0.1:%s/readyz", cfg.Server.Port)
+	client := &http.Client{Timeout: 3 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		logger.Error("healthcheck request build failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Error("healthcheck failed", slog.Any("error", err))
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		logger.Error("healthcheck returned non-200", slog.Int("status", resp.StatusCode))
+		os.Exit(1)
+	}
+}
+
+func redisDialCheck(addr string) func() error {
+	return func() error {
+		if addr == "" {
+			return nil
+		}
+		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		if err != nil {
+			return err
+		}
+		_ = conn.Close()
+		return nil
 	}
 }

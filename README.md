@@ -75,6 +75,34 @@
 
 ---
 
+## 🚢 Production deployment
+
+Hệ thống hiện có bộ deployment production hoàn chỉnh theo mô hình:
+
+- React/Vite build embed vào Go binary
+- single binary
+- single app container
+- distroless runtime
+- Docker Compose self-hosted
+- Kubernetes-ready manifests
+- GitHub Actions CI/CD multi-arch
+
+Tài liệu vận hành production đầy đủ:
+
+- [D:/Code/OWNER/ams/deploy/README.md](/D:/Code/OWNER/ams/deploy/README.md)
+
+Artifacts chính:
+
+- [D:/Code/OWNER/ams/Dockerfile](/D:/Code/OWNER/ams/Dockerfile)
+- [D:/Code/OWNER/ams/deploy/compose/docker-compose.production.yml](/D:/Code/OWNER/ams/deploy/compose/docker-compose.production.yml)
+- [D:/Code/OWNER/ams/deploy/caddy/Caddyfile](/D:/Code/OWNER/ams/deploy/caddy/Caddyfile)
+- [D:/Code/OWNER/ams/deploy/k8s/base/deployment.yaml](/D:/Code/OWNER/ams/deploy/k8s/base/deployment.yaml)
+- [D:/Code/OWNER/ams/.github/workflows/ci.yml](/D:/Code/OWNER/ams/.github/workflows/ci.yml)
+- [D:/Code/OWNER/ams/.github/workflows/release.yml](/D:/Code/OWNER/ams/.github/workflows/release.yml)
+- [D:/Code/OWNER/ams/mise.toml](/D:/Code/OWNER/ams/mise.toml)
+
+---
+
 ## 📂 Cấu trúc thư mục
 
 ```text

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/owner/auth-server/internal/authorization/permission"
+	"github.com/owner/auth-server/internal/config"
 	"github.com/owner/auth-server/internal/domain"
 	passwordsvc "github.com/owner/auth-server/internal/security/password"
 	"gorm.io/driver/postgres"
@@ -15,13 +16,21 @@ import (
 )
 
 // Connect opens the GORM database connection (PostgreSQL)
-func Connect(dsn string) *gorm.DB {
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+func Connect(cfg config.DatabaseConfig) *gorm.DB {
+	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Warn),
 	})
 	if err != nil {
 		log.Fatalf("❌ failed to connect database: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("❌ failed to get sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
 	log.Println("✅ Connected to PostgreSQL")
 	return db
 }

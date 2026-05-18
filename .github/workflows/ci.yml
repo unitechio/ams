@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - name: Install frontend deps
+        run: npm ci
+
+      - name: Build embedded frontend bundle
+        run: npm run embed:web:production
+
+      - name: Run backend tests
+        working-directory: server
+        run: go test ./...
+
+      - name: Build production frontend
+        run: npm run build:frontend:production
+
+      - name: Build production server binary
+        working-directory: server
+        run: go build -trimpath ./cmd/server
+
+      - name: Build container image
+        run: docker build --build-arg VERSION=${GITHUB_SHA::7} -t ams:test .

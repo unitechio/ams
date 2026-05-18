@@ -1,0 +1,46 @@
+[tools]
+node = "22.15.0"
+go = "1.25.0"
+
+[env]
+APP_ENV = "development"
+
+[tasks.frontend-dev]
+description = "Run Vite dev server"
+run = "npm run dev"
+
+[tasks.backend-dev]
+description = "Run Go backend with Air autoreload"
+run = "cd server && air -c ../.air.toml"
+
+[tasks.embed-dev]
+description = "Build frontend in development mode and sync it into Go embed assets"
+run = "npm run embed:web:development"
+
+[tasks.embed-staging]
+description = "Build frontend in staging mode and sync it into Go embed assets"
+run = "npm run embed:web:staging"
+
+[tasks.embed-prod]
+description = "Build frontend in production mode and sync it into Go embed assets"
+run = "npm run embed:web:production"
+
+[tasks.build-dev]
+description = "Build single-binary artifact for development"
+run = "make build APP_ENV=development"
+
+[tasks.build-staging]
+description = "Build single-binary artifact for staging"
+run = "make build APP_ENV=staging"
+
+[tasks.build-prod]
+description = "Build single-binary artifact for production"
+run = "make build APP_ENV=production"
+
+[tasks.test]
+description = "Run backend tests and frontend production build"
+run = "make test"
+
+[tasks.compose-prod]
+description = "Start the production compose stack"
+run = "make compose-up"
