@@ -426,9 +426,9 @@ export default function PermissionsPage() {
 
         {/* Content */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white rounded-xl border border-slate-100 shadow-sm">
+          <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
             <Loader2 className="w-8 h-8 text-emerald-600 animate-spin" />
-            <p className="text-sm text-slate-400 font-medium">Đang tải dữ liệu...</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">Đang tải dữ liệu...</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-slate-200 dark:border-slate-800">

@@ -383,7 +383,7 @@ export default function SettingsPage() {
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100 mb-2">Cài đặt mã Authenticator</p>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mb-4">Quét mã QR bằng Google Authenticator hoặc Microsoft Authenticator.</p>
                 <div className="flex gap-4">
-                  <div className="bg-white p-2 rounded-lg shadow-sm border border-slate-200">
+                  <div className="bg-white dark:bg-slate-950 p-2 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
                     <img src={setup2FAData.qr_code_url} alt="QR Code" className="w-24 h-24" />
                   </div>
                   <div className="flex-1 space-y-3">
@@ -444,12 +444,12 @@ export default function SettingsPage() {
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                           {s.device}
                           {s.is_current && <span className="text-[9px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-400 rounded-full uppercase tracking-wider font-bold">Hiện tại</span>}
-                          {s.trusted && <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full uppercase tracking-wider font-bold">Trusted</span>}
+                          {s.trusted && <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 rounded-full uppercase tracking-wider font-bold">Trusted</span>}
                         </p>
                         <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mt-1">
                           <span className="flex items-center gap-1"><Globe className="w-3 h-3" /> {s.location} ({s.ip})</span>
                           <span>•</span>
-                          <span>{s.client_id || 'web_portal'}</span>
+                          <span className="rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 font-mono text-[10px] text-slate-600 dark:text-slate-300">{s.client_id || 'web_portal'}</span>
                           <span>•</span>
                           <span>{s.last_active}</span>
                         </div>

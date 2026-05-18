@@ -254,7 +254,7 @@ export default function AssignRolePermissionsPage() {
               </div>
 
               {/* PERMISSION LIST */}
-              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+              <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5 bg-slate-50/40 dark:bg-slate-950/40">
                 {Object.entries(groups).map(([group, items]) => {
                   if (items.length === 0) return null;
 
@@ -316,7 +316,7 @@ export default function AssignRolePermissionsPage() {
                       </button>
 
                       {isExpanded && (
-                        <div className="p-2 grid grid-cols-1 2xl:grid-cols-2 gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <div className="p-2.5 grid grid-cols-1 2xl:grid-cols-2 gap-2.5 animate-in fade-in slide-in-from-top-2 duration-200">
                           {items.map(p => {
                             const isChecked = p.code in selectedPerms;
                             const currentScope = selectedPerms[p.code];

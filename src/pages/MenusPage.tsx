@@ -72,13 +72,13 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
 
   return (
     <>
-      <tr className="group hover:bg-slate-50/80 transition-colors">
+      <tr className="group hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
         {/* Expand toggle */}
         <td className="w-10 px-3 py-3">
           {hasChildren ? (
             <button
               onClick={onToggle}
-              className="w-6 h-6 rounded-md hover:bg-slate-200 flex items-center justify-center text-slate-400 transition-colors"
+              className="w-6 h-6 rounded-md hover:bg-slate-200 dark:hover:bg-slate-800 flex items-center justify-center text-slate-400 dark:text-slate-500 transition-colors"
             >
               {expanded
                 ? <ChevronDown className="w-3.5 h-3.5" />
@@ -92,8 +92,8 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
         {/* Icon + Title */}
         <td className="px-3 py-3">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0">
-              <IconDisplay name={menu.icon} className="w-4 h-4 text-emerald-600" />
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/50 flex items-center justify-center shrink-0">
+              <IconDisplay name={menu.icon} className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{menu.title}</p>
@@ -115,7 +115,7 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
 
         {/* Order */}
         <td className="px-3 py-3 text-center">
-          <span className="text-xs font-mono text-slate-400">{menu.sort_order}</span>
+            <span className="text-xs font-mono text-slate-400 dark:text-slate-500">{menu.sort_order}</span>
         </td>
 
         {/* Children count */}
@@ -134,7 +134,7 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
               variant="ghost"
               size="icon"
               onClick={() => onAddChild(menu.id)}
-              className="h-7 w-7 rounded-md text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+              className="h-7 w-7 rounded-md text-slate-400 dark:text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
               title="Thêm menu con"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -143,7 +143,7 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
               variant="ghost"
               size="icon"
               onClick={() => onEdit(menu)}
-              className="h-7 w-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+              className="h-7 w-7 rounded-md text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
               title="Chỉnh sửa"
             >
               <Pencil className="w-3.5 h-3.5" />
@@ -163,7 +163,7 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
 
       {/* Children rows */}
       {hasChildren && expanded && children.map(child => (
-        <tr key={child.id} className="group hover:bg-slate-50/50 transition-colors bg-slate-50/30">
+        <tr key={child.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors bg-slate-50/30 dark:bg-slate-800/20">
           <td className="px-3 py-2.5" />
           <td className="px-3 py-2.5">
             <div className="flex items-center gap-3 pl-4 border-l-2 border-slate-200 dark:border-slate-800 ml-3">
@@ -171,8 +171,8 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
                 <IconDisplay name={child.icon} className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
               </div>
               <div>
-                <p className="text-[13px] font-medium text-slate-700">{child.title}</p>
-                <p className="text-[10px] text-slate-400 font-mono mt-0.5">{child.url}</p>
+                <p className="text-[13px] font-medium text-slate-700 dark:text-slate-300">{child.title}</p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">{child.url}</p>
               </div>
             </div>
           </td>
@@ -186,7 +186,7 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
             )}
           </td>
           <td className="px-3 py-2.5 text-center">
-            <span className="text-[11px] font-mono text-slate-300">{child.sort_order}</span>
+            <span className="text-[11px] font-mono text-slate-300 dark:text-slate-600">{child.sort_order}</span>
           </td>
           <td className="px-3 py-2.5" />
           <td className="px-3 py-2.5">
@@ -195,7 +195,7 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
                 variant="ghost"
                 size="icon"
                 onClick={() => onEdit(child)}
-                className="h-7 w-7 rounded-md text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                className="h-7 w-7 rounded-md text-slate-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
               >
                 <Pencil className="w-3.5 h-3.5" />
               </Button>
@@ -203,7 +203,7 @@ function MenuRow({ menu, children = [], expanded, onToggle, onEdit, onDelete, on
                 variant="ghost"
                 size="icon"
                 onClick={() => onDelete(child.id)}
-                className="h-7 w-7 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50"
+                className="h-7 w-7 rounded-md text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
@@ -477,7 +477,7 @@ export default function MenusPage() {
 
                           {/* Sort Order */}
                           <td className="px-4 py-3.5 text-center">
-                            <span className="text-xs font-bold text-slate-500 font-mono">
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400 font-mono">
                               {item.sort_order}
                             </span>
                           </td>
@@ -495,12 +495,12 @@ export default function MenusPage() {
                           <td className="px-4 py-3.5">
                             {item.permission_code ? (
                               <div className="flex items-center gap-1.5">
-                                <Badge variant="outline" className="text-[10px] font-mono font-bold text-blue-700 bg-blue-50 border-blue-200">
+                                <Badge variant="outline" className="text-[10px] font-mono font-bold text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50">
                                   {item.permission_code}
                                 </Badge>
                               </div>
                             ) : (
-                              <span className="text-[10px] text-slate-400 font-medium italic">Public</span>
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium italic">Public</span>
                             )}
                           </td>
 
