@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Loader2, Plus, RefreshCcw, Search, ShieldAlert, Trash2 } from 'lucide-react';
+import { Loader2, Plus, RefreshCcw, ShieldAlert, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { AdminCard, AdminLoadingState, AdminSearchField, AdminTableFooter, AdminToolbar } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/ui/pagination';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { securityPoliciesApi, type PaginatedResponse, type SecurityPolicy } from '@/lib/api';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Guard } from '@/guards/Guard';
@@ -66,44 +68,42 @@ export default function SecurityPoliciesPage() {
         }
       />
 
-      <div className="rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+      <AdminCard>
+        <AdminToolbar>
+          <AdminSearchField>
             <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm theo code, name, policy type, target client/channel" className="pl-9" />
-          </div>
-        </div>
+          </AdminSearchField>
+        </AdminToolbar>
         {loading ? (
-          <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-emerald-600" /></div>
+          <AdminLoadingState><Loader2 className="h-6 w-6 animate-spin text-emerald-600" /></AdminLoadingState>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-400 dark:bg-slate-950/60">
-                    <th className="px-4 py-3">Policy</th>
-                    <th className="px-4 py-3">Type / Scope</th>
-                    <th className="px-4 py-3">Target</th>
-                    <th className="px-4 py-3">Runtime</th>
-                    <th className="px-4 py-3 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Policy</TableHead>
+                  <TableHead>Type / Scope</TableHead>
+                  <TableHead>Target</TableHead>
+                  <TableHead>Runtime</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                   {rows.map((policy) => (
-                    <tr key={policy.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-4 py-3">
+                    <TableRow key={policy.id}>
+                      <TableCell>
                         <div className="font-semibold text-slate-800 dark:text-slate-100">{policy.code}</div>
                         <div className="text-xs text-slate-400">{policy.name}</div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
+                      </TableCell>
+                      <TableCell className="text-xs">
                         <div className="flex items-center gap-2"><ShieldAlert className="h-4 w-4 text-amber-500" />{policy.policy_type}</div>
                         <div className="text-slate-400">{policy.scope_type} • p{policy.priority}</div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
+                      </TableCell>
+                      <TableCell className="text-xs">
                         <div>{policy.target_client || 'all clients'}</div>
                         <div className="text-slate-400">{policy.target_channel || 'all channels'}</div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
+                      </TableCell>
+                      <TableCell className="text-xs">
                         {policy.policy_type === 'auth' ? (
                           <>
                             <div>{policy.config.require_mfa ? 'Require MFA' : 'MFA inherit/default'}</div>
@@ -120,8 +120,8 @@ export default function SecurityPoliciesPage() {
                             <div className="text-slate-400">U:{String(policy.config.require_upper ?? true)} L:{String(policy.config.require_lower ?? true)} N:{String(policy.config.require_number ?? true)} S:{String(policy.config.require_special ?? true)}</div>
                           </>
                         )}
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="icon" onClick={() => navigate(`/security-policies/${policy.id}/edit`)}>
                             <ShieldAlert className="h-4 w-4 text-blue-500" />
@@ -130,20 +130,19 @@ export default function SecurityPoliciesPage() {
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+              </TableBody>
+            </Table>
             {result && result.total > result.page_size && (
-              <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-800">
+              <AdminTableFooter>
                 <Pagination total={result.total} page={result.page} pageSize={result.page_size} onPageChange={setPage} />
-              </div>
+              </AdminTableFooter>
             )}
           </>
         )}
-      </div>
+      </AdminCard>
     </div>
   );
 }

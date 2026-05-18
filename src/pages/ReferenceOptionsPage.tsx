@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus, RefreshCcw, Search, Settings2, Trash2 } from 'lucide-react';
+import { Loader2, Plus, RefreshCcw, Settings2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { AdminCard, AdminLoadingState, AdminSearchField, AdminToolbar } from '@/components/layout/AdminShell';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/ui/pagination';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { referenceOptionsApi, type PaginatedResponse, type ReferenceOption } from '@/lib/api';
 import { Guard } from '@/guards/Guard';
 import { PERMISSIONS } from '@/auth/permissions';
@@ -75,12 +77,11 @@ export default function ReferenceOptionsPage() {
         }
       />
 
-      <div className="rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800 md:flex-row md:items-center">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+      <AdminCard>
+        <AdminToolbar>
+          <AdminSearchField>
             <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm theo group, value, label" className="pl-9" />
-          </div>
+          </AdminSearchField>
           <Select value={groupFilter} onValueChange={(value) => { setGroupFilter(value); setPage(1); }}>
             <SelectTrigger className="w-full md:w-72"><SelectValue placeholder="Lọc theo group" /></SelectTrigger>
             <SelectContent>
@@ -90,43 +91,42 @@ export default function ReferenceOptionsPage() {
               ))}
             </SelectContent>
           </Select>
-        </div>
+        </AdminToolbar>
         {loading ? (
-          <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-emerald-600" /></div>
+          <AdminLoadingState><Loader2 className="h-6 w-6 animate-spin text-emerald-600" /></AdminLoadingState>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-400 dark:bg-slate-950/60">
-                    <th className="px-4 py-3">Group / Value</th>
-                    <th className="px-4 py-3">Label</th>
-                    <th className="px-4 py-3">Meta</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Group / Value</TableHead>
+                  <TableHead>Label</TableHead>
+                  <TableHead>Meta</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                   {(result?.data || []).map((item) => (
-                    <tr key={item.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-4 py-3">
+                    <TableRow key={item.id}>
+                      <TableCell>
                         <div className="font-semibold text-slate-800 dark:text-slate-100">{item.option_group}</div>
                         <div className="text-xs text-slate-400">{item.value}</div>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <div className="font-medium text-slate-700 dark:text-slate-200">{item.label}</div>
                         <div className="text-xs text-slate-400">{item.description || 'Không có mô tả'}</div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500 dark:text-slate-400">
                         <div className="max-w-md truncate">{item.meta_json || '{}'}</div>
-                      </td>
-                      <td className="px-4 py-3 text-xs text-slate-500">
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500 dark:text-slate-400">
                         <div className="flex items-center gap-2">
                           <Settings2 className="h-4 w-4 text-emerald-500" />
                           {item.active ? `Active • #${item.sort_order}` : `Inactive • #${item.sort_order}`}
                         </div>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <div className="flex justify-end gap-2">
                           <Guard permission={PERMISSIONS.OPTION_UPDATE}>
                             <Button variant="outline" size="sm" onClick={() => navigate(`/reference-options/${item.id}/edit`)}>Sửa</Button>
@@ -142,12 +142,11 @@ export default function ReferenceOptionsPage() {
                             </Button>
                           </Guard>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+              </TableBody>
+            </Table>
             <Pagination
               total={result?.total || 0}
               page={result?.page || 1}
@@ -156,7 +155,7 @@ export default function ReferenceOptionsPage() {
             />
           </>
         )}
-      </div>
+      </AdminCard>
     </div>
   );
 }

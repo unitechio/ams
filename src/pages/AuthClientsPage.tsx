@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AppWindow, Bot, Copy, KeyRound, Loader2, Plus, RefreshCcw, RotateCw, Search, Trash2 } from 'lucide-react';
+import { AppWindow, Bot, Copy, KeyRound, Loader2, Plus, RefreshCcw, RotateCw, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { AdminCard, AdminLoadingState, AdminSearchField, AdminTableFooter, AdminToolbar } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Pagination } from '@/components/ui/pagination';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { clientsApi, copyText, serviceAccountsApi, type AuthClient, type PaginatedResponse } from '@/lib/api';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { Guard } from '@/guards/Guard';
@@ -98,63 +100,61 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
         }
       />
 
-      <div className="rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-          <div className="relative flex-1">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+      <AdminCard>
+        <AdminToolbar>
+          <AdminSearchField>
             <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm theo client_id, name, owner team, domain group" className="pl-9" />
-          </div>
-        </div>
+          </AdminSearchField>
+        </AdminToolbar>
         {loading ? (
-          <div className="flex items-center justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-emerald-600" /></div>
+          <AdminLoadingState><Loader2 className="h-6 w-6 animate-spin text-emerald-600" /></AdminLoadingState>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50/80 text-left text-[11px] uppercase tracking-wider text-slate-400 dark:bg-slate-950/60">
-                    <th className="px-4 py-3">Client</th>
-                    <th className="px-4 py-3">Template / Scope</th>
-                    <th className="px-4 py-3">Grant / Security</th>
-                    <th className="px-4 py-3">Audience / Channel</th>
-                    <th className="px-4 py-3">Approval / Secret</th>
-                    <th className="px-4 py-3 text-right">Thao tác</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Template / Scope</TableHead>
+                  <TableHead>Grant / Security</TableHead>
+                  <TableHead>Audience / Channel</TableHead>
+                  <TableHead>Approval / Secret</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                   {rows.map((client) => (
-                    <tr key={client.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-4 py-3 align-top">
+                    <TableRow key={client.id}>
+                      <TableCell className="align-top">
                         <div className="font-semibold text-slate-800 dark:text-slate-100">{client.client_id}</div>
                         <div className="text-xs text-slate-500 dark:text-slate-400">{client.name}</div>
                         <div className="text-[11px] text-slate-400">{client.domain_group} • {client.environment} • {client.owner_team || 'unassigned'}</div>
-                      </td>
-                      <td className="px-4 py-3 align-top text-xs text-slate-600 dark:text-slate-300">
+                      </TableCell>
+                      <TableCell className="align-top text-xs">
                         <div className="flex items-center gap-2">
                           {client.app_type === 'internal_service' ? <Bot className="h-4 w-4 text-emerald-500" /> : <AppWindow className="h-4 w-4 text-slate-400" />}
                           <span>{client.client_template || client.app_type}</span>
                         </div>
                         <div className="mt-1">{client.tags.join(', ') || 'no tags'}</div>
-                      </td>
-                      <td className="px-4 py-3 align-top text-xs text-slate-600 dark:text-slate-300">
+                      </TableCell>
+                      <TableCell className="align-top text-xs">
                         <div>{client.grant_types.join(', ')}</div>
                         <div className="mt-1 text-slate-400">
                           {client.public ? 'Public' : 'Confidential'}
                           {client.pkce_required ? ' • PKCE' : ''}
                           {client.legacy_password_grant ? ' • Legacy password' : ''}
                         </div>
-                      </td>
-                      <td className="px-4 py-3 align-top text-xs text-slate-600 dark:text-slate-300">
+                      </TableCell>
+                      <TableCell className="align-top text-xs">
                         <div>{client.audiences.join(', ')}</div>
                         <div className="mt-1 text-slate-400">{client.channels.join(', ')}</div>
-                      </td>
-                      <td className="px-4 py-3 align-top text-xs text-slate-600 dark:text-slate-300">
+                      </TableCell>
+                      <TableCell className="align-top text-xs">
                         <div className={client.approval_status === 'approved' ? 'text-emerald-600' : client.approval_status === 'pending' ? 'text-amber-600' : 'text-red-500'}>
                           {client.approval_status}
                         </div>
                         <div className="mt-1 text-slate-400">{secretStatus(client)}</div>
-                      </td>
-                      <td className="px-4 py-3">
+                      </TableCell>
+                      <TableCell>
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="icon" onClick={async () => {
                             try {
@@ -176,20 +176,19 @@ export function AuthClientsManager({ mode = 'all' }: { mode?: Mode }) {
                             <Trash2 className="h-4 w-4 text-red-500" />
                           </Button>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-            </div>
+              </TableBody>
+            </Table>
             {result && result.total > result.page_size && (
-              <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-800">
+              <AdminTableFooter>
                 <Pagination total={result.total} page={result.page} pageSize={result.page_size} onPageChange={setPage} />
-              </div>
+              </AdminTableFooter>
             )}
           </>
         )}
-      </div>
+      </AdminCard>
     </div>
   );
 }
