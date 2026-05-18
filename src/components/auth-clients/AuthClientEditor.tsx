@@ -424,6 +424,41 @@ export function AuthClientEditor({ mode, clientId }: { mode: Mode; clientId?: nu
                 </div>
               </div>
             </AdminFormNote>
+
+            <AdminFormNote>
+              <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                <p className="font-semibold text-slate-900 dark:text-slate-100">Field guide</p>
+                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                  <span className="font-medium">Client Template:</span> preset cho web, mobile, service hoặc partner. Dùng để giảm sai sót boundary khi tạo mới.
+                </div>
+                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                  <span className="font-medium">Client ID:</span> định danh app/service. Nên theo chuẩn `tenant.app.env`, không nhét channel vào đây.
+                </div>
+                {!isServiceMode ? (
+                  <>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                      <span className="font-medium">Public / PKCE:</span> public client dành cho SPA/mobile, không giữ secret; PKCE nên bật mặc định cho authorization code.
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                      <span className="font-medium">Redirect URIs:</span> chỉ whitelist callback hợp lệ để tránh open redirect hoặc token hijack.
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                      <span className="font-medium">Legacy password grant:</span> chỉ dùng cho migration cũ, không nên bật cho client mới.
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                    <span className="font-medium">Service account:</span> chỉ dùng `client_credentials`, không có redirect URI, không map login channel kiểu human.
+                  </div>
+                )}
+                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                  <span className="font-medium">Audiences:</span> resource server mà token được phép gọi. Đây là lớp chống reuse token sang API khác.
+                </div>
+                <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                  <span className="font-medium">Channels:</span> map bề mặt đăng nhập được phép dùng client này, ví dụ web, crm, mobile hoặc service.
+                </div>
+              </div>
+            </AdminFormNote>
           </div>
         </div>
       </AdminFormSurface>

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { StepUpDialog } from '@/components/auth/StepUpDialog';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { AdminFormSection, AdminFormSurface } from '@/components/layout/AdminFormShell';
+import { AdminFormNote, AdminFormSection, AdminFormSurface } from '@/components/layout/AdminFormShell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -169,6 +169,30 @@ export function SSOProviderEditor({ providerId }: { providerId?: number }) {
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-800"><input type="checkbox" checked={form.allow_auto_provision} onChange={(e) => setForm(f => ({ ...f, allow_auto_provision: e.target.checked }))} /> Auto provision user</label>
             </div>
           </AdminFormSection>
+
+          <AdminFormNote>
+            <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+              <p className="font-semibold text-slate-900 dark:text-slate-100">Field guide</p>
+              <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                <span className="font-medium">Provider ID:</span> mã định danh nội bộ của IdP, dùng trong callback route và config lookup runtime.
+              </div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                <span className="font-medium">Type:</span> `oidc` hoặc `oauth2` cho flow code exchange; `saml` cho enterprise federation kiểu XML/assertion.
+              </div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                <span className="font-medium">Authorize URL / Token URL / User Info URL:</span> endpoint của IdP để redirect login, exchange code và lấy profile.
+              </div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                <span className="font-medium">Redirect URI:</span> callback đã whitelist ở IdP. Sai URI là nguyên nhân phổ biến khiến SSO lỗi ngay sau login.
+              </div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                <span className="font-medium">Scope:</span> với OIDC thường cần ít nhất `openid profile email` để lấy identity đủ cho local mapping.
+              </div>
+              <div className="rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-950">
+                <span className="font-medium">Auto provision:</span> cho phép tạo local user từ identity bên ngoài khi chưa tồn tại. Chỉ bật nếu governance cho phép.
+              </div>
+            </div>
+          </AdminFormNote>
         </div>
       </AdminFormSurface>
     </div>
