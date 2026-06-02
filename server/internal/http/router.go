@@ -7,8 +7,9 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/owner/auth-server/internal/authorization/permission"
+	"github.com/owner/auth-server/internal/http/handler"
+	"github.com/owner/auth-server/internal/http/middleware"
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
-	"github.com/owner/auth-server/internal/middleware"
 )
 
 // Setup builds the Gin engine with all routes and middleware.
@@ -23,17 +24,17 @@ func Setup(
 	permLoader middleware.PermissionLoader,
 	auditLogger middleware.AuditLogger,
 	stepUpPolicyRepo middleware.StepUpPolicyRepository,
-	authH *AuthHandler,
-	userH *UserHandler,
-	clientH *ClientHandler,
-	ssoProviderH *SSOProviderHandler,
-	loginChannelH *LoginChannelHandler,
-	securityPolicyH *SecurityPolicyHandler,
-	referenceOptionH *ReferenceOptionHandler,
-	roleH *RoleHandler,
-	permH *PermissionHandler,
-	menuH *MenuHandler,
-	logH *LogHandler,
+	authH *handler.AuthHandler,
+	userH *handler.UserHandler,
+	clientH *handler.ClientHandler,
+	ssoProviderH *handler.SSOProviderHandler,
+	loginChannelH *handler.LoginChannelHandler,
+	securityPolicyH *handler.SecurityPolicyHandler,
+	referenceOptionH *handler.ReferenceOptionHandler,
+	roleH *handler.RoleHandler,
+	permH *handler.PermissionHandler,
+	menuH *handler.MenuHandler,
+	logH *handler.LogHandler,
 	allowOrigins []string,
 	logger *slog.Logger,
 	enableSecurityHeaders bool,

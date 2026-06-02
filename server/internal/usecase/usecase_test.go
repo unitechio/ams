@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -34,7 +35,7 @@ func newtestUserRepo(users ...*domain.User) *testUserRepo {
 	return &testUserRepo{users: store}
 }
 
-func (r *testUserRepo) FindByID(id uint) (*domain.User, error) {
+func (r *testUserRepo) FindByID(ctx context.Context, id uint) (*domain.User, error) {
 	user, ok := r.users[id]
 	if !ok {
 		return nil, errors.New("not found")
@@ -44,7 +45,7 @@ func (r *testUserRepo) FindByID(id uint) (*domain.User, error) {
 	return &cloned, nil
 }
 
-func (r *testUserRepo) FindByUsername(username string) (*domain.User, error) {
+func (r *testUserRepo) FindByUsername(ctx context.Context, username string) (*domain.User, error) {
 	for _, user := range r.users {
 		if user.Username == username {
 			cloned := *user
@@ -55,7 +56,7 @@ func (r *testUserRepo) FindByUsername(username string) (*domain.User, error) {
 	return nil, errors.New("not found")
 }
 
-func (r *testUserRepo) FindByEmail(email string) (*domain.User, error) {
+func (r *testUserRepo) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
 	for _, user := range r.users {
 		if user.Email == email {
 			cloned := *user
@@ -66,7 +67,7 @@ func (r *testUserRepo) FindByEmail(email string) (*domain.User, error) {
 	return nil, errors.New("not found")
 }
 
-func (r *testUserRepo) List(spec interface{}) ([]*domain.User, int64, error) {
+func (r *testUserRepo) List(ctx context.Context, spec interface{}) ([]*domain.User, int64, error) {
 	result := make([]*domain.User, 0, len(r.users))
 	for _, user := range r.users {
 		cloned := *user
@@ -76,7 +77,7 @@ func (r *testUserRepo) List(spec interface{}) ([]*domain.User, int64, error) {
 	return result, int64(len(result)), nil
 }
 
-func (r *testUserRepo) Save(u *domain.User) error {
+func (r *testUserRepo) Save(ctx context.Context, u *domain.User) error {
 	if u.ID == 0 {
 		u.ID = uint(len(r.users) + 1)
 	}
@@ -87,17 +88,17 @@ func (r *testUserRepo) Save(u *domain.User) error {
 	return nil
 }
 
-func (r *testUserRepo) Delete(id uint) error {
+func (r *testUserRepo) Delete(ctx context.Context, id uint) error {
 	delete(r.users, id)
 	return nil
 }
 
-func (r *testUserRepo) SetRoles(userID uint, roleIDs []uint) error {
+func (r *testUserRepo) SetRoles(ctx context.Context, userID uint, roleIDs []uint) error {
 	r.rolesAssigned = append([]uint{}, roleIDs...)
 	return nil
 }
 
-func (r *testUserRepo) UpdateLastLogin(userID uint) error {
+func (r *testUserRepo) UpdateLastLogin(ctx context.Context, userID uint) error {
 	user := r.users[userID]
 	now := time.Now()
 	user.LastLogin = &now
@@ -106,7 +107,7 @@ func (r *testUserRepo) UpdateLastLogin(userID uint) error {
 	return nil
 }
 
-func (r *testUserRepo) UpdateFailedLogin(userID uint, count int, lockedUntil *time.Time) error {
+func (r *testUserRepo) UpdateFailedLogin(ctx context.Context, userID uint, count int, lockedUntil *time.Time) error {
 	user := r.users[userID]
 	user.FailedLogins = count
 	user.LockedUntil = lockedUntil
@@ -122,12 +123,12 @@ type testTokenRepo struct {
 	trustedDevice  *domain.RefreshToken
 }
 
-func (r *testTokenRepo) Save(t *domain.RefreshToken) error {
+func (r *testTokenRepo) Save(ctx context.Context, t *domain.RefreshToken) error {
 	r.saved = append(r.saved, t)
 	return nil
 }
 
-func (r *testTokenRepo) FindByToken(token string) (*domain.RefreshToken, error) {
+func (r *testTokenRepo) FindByToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
 	if r.byToken != nil {
 		if item, ok := r.byToken[token]; ok {
 			return item, nil
@@ -136,39 +137,39 @@ func (r *testTokenRepo) FindByToken(token string) (*domain.RefreshToken, error) 
 	return nil, errors.New("not implemented")
 }
 
-func (r *testTokenRepo) RevokeByUserID(userID uint) error {
+func (r *testTokenRepo) RevokeByUserID(ctx context.Context, userID uint) error {
 	r.revokedUserID = userID
 	return nil
 }
 
-func (r *testTokenRepo) RevokeToken(token string) error {
+func (r *testTokenRepo) RevokeToken(ctx context.Context, token string) error {
 	return nil
 }
 
-func (r *testTokenRepo) RevokeSession(userID uint, sessionID string) error {
+func (r *testTokenRepo) RevokeSession(ctx context.Context, userID uint, sessionID string) error {
 	r.revokedSession = sessionID
 	return nil
 }
 
-func (r *testTokenRepo) RevokeSessionByID(sessionID string) error {
+func (r *testTokenRepo) RevokeSessionByID(ctx context.Context, sessionID string) error {
 	r.revokedSession = sessionID
 	return nil
 }
 
-func (r *testTokenRepo) RevokeFamily(familyID string, reason string) error {
+func (r *testTokenRepo) RevokeFamily(ctx context.Context, familyID string, reason string) error {
 	r.revokedFamily = familyID
 	return nil
 }
 
-func (r *testTokenRepo) ListActiveSessions(userID uint) ([]*domain.RefreshToken, error) {
+func (r *testTokenRepo) ListActiveSessions(ctx context.Context, userID uint) ([]*domain.RefreshToken, error) {
 	return nil, nil
 }
 
-func (r *testTokenRepo) ListSessions(filters map[string]interface{}) ([]*domain.RefreshToken, int64, error) {
+func (r *testTokenRepo) ListSessions(ctx context.Context, filters map[string]interface{}) ([]*domain.RefreshToken, int64, error) {
 	return nil, 0, nil
 }
 
-func (r *testTokenRepo) FindTrustedDevice(userID uint, clientID, fingerprint string) (*domain.RefreshToken, error) {
+func (r *testTokenRepo) FindTrustedDevice(ctx context.Context, userID uint, clientID, fingerprint string) (*domain.RefreshToken, error) {
 	if r.trustedDevice != nil {
 		return r.trustedDevice, nil
 	}
@@ -323,7 +324,7 @@ func newTestSecurityPolicyRepo() *testSecurityPolicyRepo {
 	}}
 }
 
-func (r *testClientRepo) FindByClientID(clientID string) (*domain.AuthClient, error) {
+func (r *testClientRepo) FindByClientID(ctx context.Context, clientID string) (*domain.AuthClient, error) {
 	client, ok := r.clients[clientID]
 	if !ok {
 		return nil, errors.New("not found")
@@ -332,7 +333,7 @@ func (r *testClientRepo) FindByClientID(clientID string) (*domain.AuthClient, er
 	return &cloned, nil
 }
 
-func (r *testClientRepo) List(filters map[string]interface{}) ([]*domain.AuthClient, int64, error) {
+func (r *testClientRepo) List(ctx context.Context, filters map[string]interface{}) ([]*domain.AuthClient, int64, error) {
 	result := make([]*domain.AuthClient, 0, len(r.clients))
 	for _, client := range r.clients {
 		cloned := *client
@@ -341,7 +342,7 @@ func (r *testClientRepo) List(filters map[string]interface{}) ([]*domain.AuthCli
 	return result, int64(len(result)), nil
 }
 
-func (r *testClientRepo) Save(client *domain.AuthClient) error {
+func (r *testClientRepo) Save(ctx context.Context, client *domain.AuthClient) error {
 	if client.ID == 0 {
 		client.ID = uint(len(r.clients) + 1)
 	}
@@ -350,7 +351,7 @@ func (r *testClientRepo) Save(client *domain.AuthClient) error {
 	return nil
 }
 
-func (r *testClientRepo) Delete(id uint) error {
+func (r *testClientRepo) Delete(ctx context.Context, id uint) error {
 	for key, client := range r.clients {
 		if client.ID == id {
 			delete(r.clients, key)
@@ -360,7 +361,7 @@ func (r *testClientRepo) Delete(id uint) error {
 	return nil
 }
 
-func (r *testSSOProviderRepo) FindByProviderID(providerID string) (*domain.SSOProvider, error) {
+func (r *testSSOProviderRepo) FindByProviderID(ctx context.Context, providerID string) (*domain.SSOProvider, error) {
 	provider, ok := r.providers[providerID]
 	if !ok {
 		return nil, errors.New("not found")
@@ -369,7 +370,7 @@ func (r *testSSOProviderRepo) FindByProviderID(providerID string) (*domain.SSOPr
 	return &cloned, nil
 }
 
-func (r *testSSOProviderRepo) FindByID(id uint) (*domain.SSOProvider, error) {
+func (r *testSSOProviderRepo) FindByID(ctx context.Context, id uint) (*domain.SSOProvider, error) {
 	for _, provider := range r.providers {
 		if provider.ID == id {
 			cloned := *provider
@@ -379,7 +380,7 @@ func (r *testSSOProviderRepo) FindByID(id uint) (*domain.SSOProvider, error) {
 	return nil, errors.New("not found")
 }
 
-func (r *testSSOProviderRepo) List(filters map[string]interface{}) ([]*domain.SSOProvider, int64, error) {
+func (r *testSSOProviderRepo) List(ctx context.Context, filters map[string]interface{}) ([]*domain.SSOProvider, int64, error) {
 	result := make([]*domain.SSOProvider, 0, len(r.providers))
 	for _, provider := range r.providers {
 		cloned := *provider
@@ -394,7 +395,7 @@ func (r *testSSOProviderRepo) List(filters map[string]interface{}) ([]*domain.SS
 	return result, int64(len(result)), nil
 }
 
-func (r *testSSOProviderRepo) Save(provider *domain.SSOProvider) error {
+func (r *testSSOProviderRepo) Save(ctx context.Context, provider *domain.SSOProvider) error {
 	if provider.ID == 0 {
 		provider.ID = uint(len(r.providers) + 1)
 	}
@@ -403,7 +404,7 @@ func (r *testSSOProviderRepo) Save(provider *domain.SSOProvider) error {
 	return nil
 }
 
-func (r *testSSOProviderRepo) Delete(id uint) error {
+func (r *testSSOProviderRepo) Delete(ctx context.Context, id uint) error {
 	for key, provider := range r.providers {
 		if provider.ID == id {
 			delete(r.providers, key)
@@ -413,7 +414,7 @@ func (r *testSSOProviderRepo) Delete(id uint) error {
 	return nil
 }
 
-func (r *testLoginChannelRepo) FindByCode(code string) (*domain.LoginChannel, error) {
+func (r *testLoginChannelRepo) FindByCode(ctx context.Context, code string) (*domain.LoginChannel, error) {
 	channel, ok := r.channels[code]
 	if !ok {
 		return nil, errors.New("not found")
@@ -422,7 +423,7 @@ func (r *testLoginChannelRepo) FindByCode(code string) (*domain.LoginChannel, er
 	return &cloned, nil
 }
 
-func (r *testLoginChannelRepo) List(filters map[string]interface{}) ([]*domain.LoginChannel, int64, error) {
+func (r *testLoginChannelRepo) List(ctx context.Context, filters map[string]interface{}) ([]*domain.LoginChannel, int64, error) {
 	result := make([]*domain.LoginChannel, 0, len(r.channels))
 	for _, channel := range r.channels {
 		cloned := *channel
@@ -431,7 +432,7 @@ func (r *testLoginChannelRepo) List(filters map[string]interface{}) ([]*domain.L
 	return result, int64(len(result)), nil
 }
 
-func (r *testLoginChannelRepo) Save(channel *domain.LoginChannel) error {
+func (r *testLoginChannelRepo) Save(ctx context.Context, channel *domain.LoginChannel) error {
 	if channel.ID == 0 {
 		channel.ID = uint(len(r.channels) + 1)
 	}
@@ -440,7 +441,7 @@ func (r *testLoginChannelRepo) Save(channel *domain.LoginChannel) error {
 	return nil
 }
 
-func (r *testLoginChannelRepo) Delete(id uint) error {
+func (r *testLoginChannelRepo) Delete(ctx context.Context, id uint) error {
 	for key, channel := range r.channels {
 		if channel.ID == id {
 			delete(r.channels, key)
@@ -450,7 +451,7 @@ func (r *testLoginChannelRepo) Delete(id uint) error {
 	return nil
 }
 
-func (r *testSecurityPolicyRepo) List(filters map[string]interface{}) ([]*domain.SecurityPolicy, int64, error) {
+func (r *testSecurityPolicyRepo) List(ctx context.Context, filters map[string]interface{}) ([]*domain.SecurityPolicy, int64, error) {
 	result := make([]*domain.SecurityPolicy, 0, len(r.items))
 	for _, item := range r.items {
 		cloned := *item
@@ -468,7 +469,7 @@ func (r *testSecurityPolicyRepo) List(filters map[string]interface{}) ([]*domain
 	return result, int64(len(result)), nil
 }
 
-func (r *testSecurityPolicyRepo) Save(policy *domain.SecurityPolicy) error {
+func (r *testSecurityPolicyRepo) Save(ctx context.Context, policy *domain.SecurityPolicy) error {
 	if policy.ID == 0 {
 		policy.ID = uint(len(r.items) + 1)
 	}
@@ -487,7 +488,7 @@ func (r *testSecurityPolicyRepo) Save(policy *domain.SecurityPolicy) error {
 	return nil
 }
 
-func (r *testSecurityPolicyRepo) Delete(id uint) error {
+func (r *testSecurityPolicyRepo) Delete(ctx context.Context, id uint) error {
 	for i, item := range r.items {
 		if item.ID == id {
 			r.items = append(r.items[:i], r.items[i+1:]...)
@@ -497,12 +498,12 @@ func (r *testSecurityPolicyRepo) Delete(id uint) error {
 	return nil
 }
 
-func (r *testAuthHistoryRepo) Save(h *domain.AuthHistory) error {
+func (r *testAuthHistoryRepo) Save(ctx context.Context, h *domain.AuthHistory) error {
 	r.items = append(r.items, h)
 	return nil
 }
 
-func (r *testAuthHistoryRepo) List(spec interface{}) ([]*domain.AuthHistory, int64, error) {
+func (r *testAuthHistoryRepo) List(ctx context.Context, spec interface{}) ([]*domain.AuthHistory, int64, error) {
 	return r.items, int64(len(r.items)), nil
 }
 
@@ -843,7 +844,7 @@ func TestCompleteSSOProvisionsUserAndReturnsSession(t *testing.T) {
 	if resp.User.Email != "sso.user@example.com" {
 		t.Fatalf("expected provisioned user email, got %q", resp.User.Email)
 	}
-	provisioned, err := userRepo.FindByEmail("sso.user@example.com")
+	provisioned, err := userRepo.FindByEmail(context.Background(), "sso.user@example.com")
 	if err != nil {
 		t.Fatalf("expected provisioned user to exist: %v", err)
 	}

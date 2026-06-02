@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -53,7 +54,16 @@ type JWTConfig struct {
 	RefreshTokenTTL time.Duration
 }
 
-func Load() *Config {
+func LoadConfig() (*Config, error) {
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "dev"
+	}
+	
+	// Try loading environment specific file, then fallback to .env
+	_ = godotenv.Load(".env." + env)
+	_ = godotenv.Load(".env")
+
 	defaultDSN := getEnv(
 		"DB_DSN",
 		"host=localhost port=5433 user=einfra password=einfra123 dbname=demo sslmode=disable TimeZone=Asia/Ho_Chi_Minh",
@@ -63,7 +73,7 @@ func Load() *Config {
 		publicURL = "http://localhost:" + getEnv("PORT", "8080")
 	}
 
-	return &Config{
+	config := &Config{
 		Server: ServerConfig{
 			Host:               getEnv("HOST", "0.0.0.0"),
 			Port:               getEnv("PORT", "8080"),
@@ -101,6 +111,8 @@ func Load() *Config {
 			RefreshTokenTTL: getEnvDuration("JWT_REFRESH_TTL", 7*24*time.Hour),
 		},
 	}
+
+	return config, nil
 }
 
 func getEnv(key, defaultVal string) string {
