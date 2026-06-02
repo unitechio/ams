@@ -814,3 +814,12 @@ export const logsApi = {
     return get<PaginatedResponse<any>>(`/logs/auth?${q}`);
   },
 };
+
+// --- Dashboard API ------------------------------------------------------------
+
+export const dashboardApi = {
+  getStats: () => get<{
+    user_status_distribution: Array<{ status: string; count: number }>;
+    login_activity_7d: Array<{ date: string; success: number; failed: number }>;
+  }>('/dashboard/stats'),
+};

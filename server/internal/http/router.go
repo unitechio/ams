@@ -35,6 +35,7 @@ func Setup(
 	permH *handler.PermissionHandler,
 	menuH *handler.MenuHandler,
 	logH *handler.LogHandler,
+	dashboardH *handler.DashboardHandler,
 	allowOrigins []string,
 	logger *slog.Logger,
 	enableSecurityHeaders bool,
@@ -103,6 +104,9 @@ func Setup(
 		// Permission-filtered menu for current user (used by sidebar)
 		// No permission check needed — filter is applied server-side by permission set
 		auth.GET("/my-menus", menuH.MyMenus)
+
+		// Dashboard Stats
+		auth.GET("/dashboard/stats", dashboardH.GetStats)
 
 		// ── Users — requires user.read permission ────────────────────────────
 		users := auth.Group("/users")

@@ -2,12 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Users, Shield, Key, Menu as MenuIcon, TrendingUp, Activity, Clock, ArrowUpRight } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { usersApi, rolesApi, permissionsApi, menusApi } from '@/lib/api';
+import { usersApi, rolesApi, permissionsApi, menusApi, dashboardApi } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { usePermission } from '@/auth/usePermission';
 import { PERMISSIONS, PERMISSION_LABELS } from '@/auth/permissions';
 import { Guard } from '@/guards/Guard';
 import { useNavigate } from 'react-router-dom';
+import {
+  PieChart, Pie, Cell, Tooltip as RechartsTooltip, ResponsiveContainer,
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Legend
+} from 'recharts';
 
 interface Stats {
   users: number;
@@ -21,6 +25,10 @@ export default function DashboardPage() {
   const { can, isSuperAdmin } = usePermission();
   const navigate = useNavigate();
   const [stats, setStats] = useState<Stats>({ users: 0, roles: 0, permissions: 0, menus: 0 });
+  const [chartData, setChartData] = useState<{
+    user_status_distribution: any[];
+    login_activity_7d: any[];
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -30,6 +38,7 @@ export default function DashboardPage() {
         can(PERMISSIONS.ROLE_READ) ? rolesApi.list({ page_size: 1 }) : Promise.resolve(null),
         can(PERMISSIONS.PERMISSION_READ) ? permissionsApi.list() : Promise.resolve(null),
         can(PERMISSIONS.MENU_READ) ? menusApi.list({ page_size: 1 }) : Promise.resolve(null),
+        dashboardApi.getStats().catch(() => ({ user_status_distribution: [], login_activity_7d: [] })),
       ]);
       setStats({
         users: results[0].status === 'fulfilled' && results[0].value ? (results[0].value as any).total ?? 0 : 0,
@@ -37,10 +46,19 @@ export default function DashboardPage() {
         permissions: results[2].status === 'fulfilled' && results[2].value ? (results[2].value as any[]).length ?? 0 : 0,
         menus: results[3].status === 'fulfilled' && results[3].value ? (results[3].value as any).total ?? 0 : 0,
       });
+      if (results[4].status === 'fulfilled' && results[4].value) {
+        setChartData(results[4].value as any);
+      }
       setLoading(false);
     };
     load();
   }, [can]);
+
+  const STATUS_COLORS: Record<string, string> = {
+    active: '#10b981', // emerald-500
+    inactive: '#94a3b8', // slate-400
+    locked: '#f43f5e', // rose-500
+  };
 
   const statCards = [
     { label: 'Người dùng', value: stats.users, icon: Users, color: 'from-emerald-500 to-teal-600', href: '/users', perm: PERMISSIONS.USER_READ },
@@ -112,6 +130,103 @@ export default function DashboardPage() {
             </button>
           </Guard>
         ))}
+      </div>
+
+      {/* Analytics Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+        {/* Donut Chart: User Status */}
+        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+              <Users className="w-4 h-4 text-emerald-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Phân bổ người dùng</h3>
+              <p className="text-xs text-gray-400">Theo trạng thái hoạt động</p>
+            </div>
+          </div>
+          <div className="h-64 w-full">
+            {chartData?.user_status_distribution && chartData.user_status_distribution.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData.user_status_distribution}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={80}
+                    paddingAngle={5}
+                    dataKey="count"
+                  >
+                    {chartData.user_status_distribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={STATUS_COLORS[entry.status.toLowerCase()] || '#cbd5e1'} />
+                    ))}
+                  </Pie>
+                  <RechartsTooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value: number, name: string, props: any) => [value, props.payload.status === 'active' ? 'Hoạt động' : props.payload.status === 'inactive' ? 'Tạm khóa' : props.payload.status === 'locked' ? 'Khóa' : props.payload.status]}
+                  />
+                  <Legend 
+                    formatter={(value, entry: any) => {
+                      const status = entry.payload.status;
+                      return status === 'active' ? 'Hoạt động' : status === 'inactive' ? 'Tạm khóa' : status === 'locked' ? 'Khóa' : status;
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-sm text-gray-400">Chưa có dữ liệu</div>
+            )}
+          </div>
+        </div>
+
+        {/* Line Chart: Login Activity */}
+        <div className="bg-white rounded-xl border border-gray-100 p-5 shadow-sm lg:col-span-2">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+              <TrendingUp className="w-4 h-4 text-blue-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">Hoạt động đăng nhập</h3>
+              <p className="text-xs text-gray-400">Thống kê 7 ngày gần nhất</p>
+            </div>
+          </div>
+          <div className="h-64 w-full">
+            {chartData?.login_activity_7d && chartData.login_activity_7d.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData.login_activity_7d} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dy={10} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} dx={-10} />
+                  <RechartsTooltip 
+                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' }}
+                  />
+                  <Legend />
+                  <Line 
+                    type="monotone" 
+                    name="Thành công"
+                    dataKey="success" 
+                    stroke="#3b82f6" 
+                    strokeWidth={3}
+                    dot={{ r: 4, strokeWidth: 2 }}
+                    activeDot={{ r: 6 }} 
+                  />
+                  <Line 
+                    type="monotone" 
+                    name="Thất bại"
+                    dataKey="failed" 
+                    stroke="#f43f5e" 
+                    strokeWidth={2}
+                    dot={{ r: 3, strokeWidth: 2 }}
+                    activeDot={{ r: 5 }} 
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-sm text-gray-400">Chưa có dữ liệu</div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Permission Overview & Recent Activity */}

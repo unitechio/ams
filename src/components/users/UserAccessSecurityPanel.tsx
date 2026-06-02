@@ -1,5 +1,5 @@
 import React from 'react';
-import { Fingerprint, Lock, ShieldAlert, ShieldCheck, ShieldEllipsis, Smartphone, Waypoints } from 'lucide-react';
+import { Fingerprint, Lock, ShieldAlert, ShieldCheck, ShieldEllipsis, Smartphone, Waypoints, Check, ChevronsUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { type AuthClient, type LoginChannel } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Badge } from '@/components/ui/badge';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 type UserSecurityForm = {
   status: string;
@@ -151,29 +154,17 @@ export function UserAccessSecurityPanel({
                   <Fingerprint className="h-4 w-4 text-emerald-500" />
                   <Label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Client được phép đăng nhập</Label>
                 </div>
-                <div className="grid max-h-64 gap-2 overflow-y-auto pr-1">
-                  {clients.map((client) => (
-                    <button
-                      key={client.id}
-                      type="button"
-                      onClick={() => onToggleMulti('allowed_clients', client.client_id)}
-                      className={cn(
-                        'rounded-2xl border px-3 py-3 text-left transition-all',
-                        form.allowed_clients.includes(client.client_id)
-                          ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
-                          : 'border-slate-200 bg-white hover:border-emerald-200 hover:bg-emerald-50/40 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-emerald-900/50 dark:hover:bg-emerald-950/20',
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{client.name || client.client_id}</div>
-                          <div className="text-[11px] text-slate-400">{client.client_id} • {client.app_type}</div>
-                        </div>
-                        <div className={cn('h-4 w-4 rounded-full border', form.allowed_clients.includes(client.client_id) ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 dark:border-slate-600')} />
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                <MultiSelectDropdown
+                  options={clients.map((c) => ({
+                    value: c.client_id,
+                    label: c.name || c.client_id,
+                    subLabel: `${c.client_id} • ${c.app_type}`,
+                  }))}
+                  selectedValues={form.allowed_clients}
+                  onToggle={(val) => onToggleMulti('allowed_clients', val)}
+                  placeholder="Tất cả client (Mặc định)"
+                  searchPlaceholder="Tìm kiếm client..."
+                />
               </div>
 
               <div data-tour="create-user-channels" className="space-y-3">
@@ -181,29 +172,17 @@ export function UserAccessSecurityPanel({
                   <Waypoints className="h-4 w-4 text-sky-500" />
                   <Label className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Kênh đăng nhập</Label>
                 </div>
-                <div className="grid max-h-64 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-                  {channels.map((channel) => (
-                    <button
-                      key={channel.id}
-                      type="button"
-                      onClick={() => onToggleMulti('allowed_channels', channel.code)}
-                      className={cn(
-                        'rounded-2xl border px-3 py-3 text-left transition-all',
-                        form.allowed_channels.includes(channel.code)
-                          ? 'border-sky-300 bg-sky-50 dark:border-sky-900/50 dark:bg-sky-950/20'
-                          : 'border-slate-200 bg-white hover:border-sky-200 hover:bg-sky-50/40 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-sky-900/50 dark:hover:bg-sky-950/20',
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-slate-800 dark:text-slate-100">{channel.name}</div>
-                          <div className="text-[11px] text-slate-400">{channel.code} • risk {channel.risk_level}</div>
-                        </div>
-                        <div className={cn('h-4 w-4 rounded-full border', form.allowed_channels.includes(channel.code) ? 'border-sky-500 bg-sky-500' : 'border-slate-300 dark:border-slate-600')} />
-                      </div>
-                    </button>
-                  ))}
-                </div>
+                <MultiSelectDropdown
+                  options={channels.map((c) => ({
+                    value: c.code,
+                    label: c.name,
+                    subLabel: `${c.code} • risk ${c.risk_level}`,
+                  }))}
+                  selectedValues={form.allowed_channels}
+                  onToggle={(val) => onToggleMulti('allowed_channels', val)}
+                  placeholder="Tất cả kênh (Mặc định)"
+                  searchPlaceholder="Tìm kiếm kênh đăng nhập..."
+                />
               </div>
             </TabsContent>
 
@@ -228,5 +207,95 @@ function GuideItem({ title, text }: { title: string; text: string }) {
       <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{title}</p>
       <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{text}</p>
     </div>
+  );
+}
+
+function MultiSelectDropdown({
+  options,
+  selectedValues,
+  onToggle,
+  placeholder,
+  searchPlaceholder,
+}: {
+  options: { value: string; label: string; subLabel?: string }[];
+  selectedValues: string[];
+  onToggle: (value: string) => void;
+  placeholder: string;
+  searchPlaceholder: string;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const [search, setSearch] = React.useState('');
+
+  const filteredOptions = options.filter(
+    (o) =>
+      o.label.toLowerCase().includes(search.toLowerCase()) ||
+      o.value.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="flex min-h-12 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-950 focus:ring-offset-2 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-900"
+        >
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {selectedValues.length === 0 && <span className="text-slate-500 ml-1">{placeholder}</span>}
+            {selectedValues.map((val) => {
+              const opt = options.find((o) => o.value === val);
+              return (
+                <Badge key={val} variant="secondary" className="rounded-lg font-medium text-[11px] px-2.5 py-0.5">
+                  {opt?.label || val}
+                </Badge>
+              );
+            })}
+          </div>
+          <ChevronsUpDown className="h-4 w-4 shrink-0 text-slate-400 ml-2" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0 rounded-xl bg-white dark:bg-slate-950 shadow-xl border border-slate-200 dark:border-slate-800" align="start">
+        <div className="flex items-center border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+          <Search className="mr-2 h-4 w-4 shrink-0 text-slate-400" />
+          <input
+            className="flex w-full bg-transparent text-sm outline-none placeholder:text-slate-500 h-8"
+            placeholder={searchPlaceholder}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        <ScrollArea className="h-64">
+          <div className="p-1.5">
+            {filteredOptions.length === 0 ? (
+              <div className="py-6 text-center text-sm text-slate-500">Không tìm thấy kết quả.</div>
+            ) : (
+              filteredOptions.map((opt) => {
+                const isSelected = selectedValues.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => onToggle(opt.value)}
+                    className={cn(
+                      'relative flex w-full cursor-pointer select-none items-center rounded-lg px-3 py-2.5 text-sm outline-none transition-colors text-left mb-1 last:mb-0',
+                      isSelected
+                        ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-slate-50'
+                        : 'hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/50'
+                    )}
+                  >
+                    <div className="flex flex-1 flex-col">
+                      <span className="font-semibold">{opt.label}</span>
+                      {opt.subLabel && <span className="text-[11px] text-slate-400 mt-0.5">{opt.subLabel}</span>}
+                    </div>
+                    <div className={cn("ml-2 flex h-4 w-4 items-center justify-center rounded-[4px] border border-slate-300 dark:border-slate-600 transition-colors", isSelected && "bg-emerald-500 border-emerald-500 dark:bg-emerald-600 dark:border-emerald-600")}>
+                      {isSelected && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
   );
 }

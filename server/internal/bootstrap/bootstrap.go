@@ -107,6 +107,7 @@ func BuildApplication(cfg *config.Config) (*Application, error) {
 	permHandler := handler.NewPermissionHandler(permUC)
 	menuHandler := handler.NewMenuHandler(menuUC)
 	logHandler := handler.NewLogHandler(logUC)
+	dashboardHandler := handler.NewDashboardHandler(db)
 
 	engine := delivery.Setup(
 		jwtSvc,
@@ -124,6 +125,7 @@ func BuildApplication(cfg *config.Config) (*Application, error) {
 		permHandler,
 		menuHandler,
 		logHandler,
+		dashboardHandler,
 		cfg.Server.AllowOrigins,
 		logger,
 		cfg.Server.EnableSecurityHead,
