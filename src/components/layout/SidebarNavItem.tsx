@@ -182,7 +182,7 @@ export function SidebarNavItem({
           className="p-1.5 w-56 shadow-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-200 z-[100]"
         >
           <div className="px-3 py-2.5 mb-1.5 flex items-center gap-2.5 border-b border-slate-100 dark:border-slate-800/50">
-            <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shadow-sm">
+            <div className="w-6 h-6 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shadow-sm">
               <Icon className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <span className="text-[13px] font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
@@ -199,7 +199,7 @@ export function SidebarNavItem({
                   className={({ isActive }) => cn(
                     "flex items-center px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-200 group/sub",
                     isActive
-                      ? "bg-emerald-600 text-white shadow-md shadow-emerald-200 dark:shadow-none"
+                      ? "bg-emerald-600 text-white shadow-lg shadow-emerald-200 dark:shadow-none"
                       : "text-slate-600 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 hover:text-emerald-700 dark:hover:text-emerald-300"
                   )}
                 >
