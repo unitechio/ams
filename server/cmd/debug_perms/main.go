@@ -1,19 +1,24 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 
 	"github.com/owner/auth-server/internal/config"
-	"github.com/owner/auth-server/internal/infrastructure/persistence"
+	"github.com/owner/auth-server/internal/domain"
+	"github.com/owner/auth-server/internal/infrastructure/database"
 )
 
 func main() {
-	cfg := config.Load()
-	db := persistence.Connect(cfg.Database)
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		panic(err)
+	}
+	db := database.Connect(cfg.Database)
 
 	// Check superadmin user
-	var user persistence.GormUser
+	var user domain.User
 	if err := db.Where("username = ?", "superadmin").First(&user).Error; err != nil {
 		log.Fatalf("superadmin not found: %v", err)
 	}
@@ -36,13 +41,12 @@ func main() {
 	for _, r := range roles {
 		fmt.Printf("  - %s (ID: %d)\n", r.Name, r.RoleID)
 
-		// Check permissions for this role
 		type rolePerm struct {
 			Code  string
 			Scope string
 		}
 		var perms []rolePerm
-		db.Raw(`
+		db.WithContext(context.Background()).Raw(`
 			SELECT pd.code, rp.scope
 			FROM sys_role_permissions rp
 			JOIN sys_permission_defs pd ON pd.id = rp.permission_id

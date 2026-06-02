@@ -1,74 +1,15 @@
-package persistence
+package database
 
 import (
-	"encoding/json"
-	"fmt"
+	"context"
 	"log"
 	"time"
 
 	"github.com/owner/auth-server/internal/authorization/permission"
-	"github.com/owner/auth-server/internal/config"
 	"github.com/owner/auth-server/internal/domain"
 	passwordsvc "github.com/owner/auth-server/internal/security/password"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
-
-// Connect opens the GORM database connection (PostgreSQL)
-func Connect(cfg config.DatabaseConfig) *gorm.DB {
-	db, err := gorm.Open(postgres.Open(cfg.DSN), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
-	})
-	if err != nil {
-		log.Fatalf("❌ failed to connect database: %v", err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		log.Fatalf("❌ failed to get sql db: %v", err)
-	}
-	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
-	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
-	sqlDB.SetConnMaxLifetime(cfg.ConnMaxLifetime)
-	sqlDB.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
-	log.Println("✅ Connected to PostgreSQL")
-	return db
-}
-
-// Migrate auto-migrates all GORM models
-func Migrate(db *gorm.DB) {
-	err := db.AutoMigrate(
-		&GormUser{},
-		&GormRole{},
-		&GormUserRole{},
-		&GormPermissionDef{},
-		&GormRolePermission{},
-		&GormPermissionLine{},
-		&GormMenu{},
-		&GormRefreshToken{},
-		&GormAuthClient{},
-		&GormSSOProvider{},
-		&GormLoginChannel{},
-		&GormSecurityPolicy{},
-		&GormReferenceOption{},
-		&GormAuditLog{},
-		&GormAuthHistory{},
-	)
-	if err != nil {
-		log.Fatalf("❌ failed to migrate: %v", err)
-	}
-
-	// ── PostgreSQL: Partial Unique Indexes for soft-delete support
-	// Ensures username/email is unique ONLY among non-deleted records.
-	db.Exec(`DROP INDEX IF EXISTS idx_sys_users_username`)
-	db.Exec(`CREATE UNIQUE INDEX idx_sys_users_username ON sys_users (username) WHERE deleted = false`)
-
-	db.Exec(`DROP INDEX IF EXISTS idx_sys_users_email`)
-	db.Exec(`CREATE UNIQUE INDEX idx_sys_users_email ON sys_users (email) WHERE deleted = false`)
-
-	ResetSequences(db)
-	log.Println("✅ Database migrated with partial unique indexes and sequence resets")
-}
 
 // SyncMenus ensures all system menus exist in the DB with correct metadata.
 func SyncMenus(db *gorm.DB) {
@@ -76,32 +17,32 @@ func SyncMenus(db *gorm.DB) {
 	u20 := uint(20)
 	u30 := uint(30)
 
-	menus := []GormMenu{
+	menus := []domain.Menu{
 		{ID: 1, Title: "Tổng quan", URL: "/", SortOrder: 9999, Icon: "LayoutDashboard", PermissionCode: ""},
 
 		{ID: 10, Title: "Hệ thống", URL: "#", SortOrder: 1000, Icon: "Settings", PermissionCode: ""},
-		{ID: 2, Title: "Người dùng", URL: "/users", SortOrder: 990, Icon: "Users", PermissionCode: string(permission.PermissionUserRead), ParentID: &u10},
-		{ID: 7, Title: "Cấp vai trò", URL: "/user-roles", SortOrder: 980, Icon: "UserPlus", PermissionCode: string(permission.PermissionUserUpdate), ParentID: &u10},
-		{ID: 3, Title: "Vai trò", URL: "/roles", SortOrder: 970, Icon: "Shield", PermissionCode: string(permission.PermissionRoleRead), ParentID: &u10},
-		{ID: 8, Title: "Gán quyền Role", URL: "/roles/assign", SortOrder: 960, Icon: "ShieldCheck", PermissionCode: string(permission.PermissionRoleUpdate), ParentID: &u10},
+		{ID: 2, Title: "Người dùng", URL: "/users", SortOrder: 990, Icon: "Users", PermissionCode: permission.PermissionUserRead, ParentID: &u10},
+		{ID: 7, Title: "Cấp vai trò", URL: "/user-roles", SortOrder: 980, Icon: "UserPlus", PermissionCode: permission.PermissionUserUpdate, ParentID: &u10},
+		{ID: 3, Title: "Vai trò", URL: "/roles", SortOrder: 970, Icon: "Shield", PermissionCode: permission.PermissionRoleRead, ParentID: &u10},
+		{ID: 8, Title: "Gán quyền Role", URL: "/roles/assign", SortOrder: 960, Icon: "ShieldCheck", PermissionCode: permission.PermissionRoleUpdate, ParentID: &u10},
 
 		{ID: 20, Title: "Cấu hình", URL: "#", SortOrder: 800, Icon: "Wrench", PermissionCode: ""},
-		{ID: 4, Title: "Menu Sidebar", URL: "/menus", SortOrder: 790, Icon: "Menu", PermissionCode: string(permission.PermissionMenuRead), ParentID: &u20},
-		{ID: 5, Title: "Permission", URL: "/permissions", SortOrder: 780, Icon: "Key", PermissionCode: string(permission.PermissionPermRead), ParentID: &u20},
-		{ID: 9, Title: "OAuth Clients", URL: "/auth-clients", SortOrder: 770, Icon: "AppWindow", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
-		{ID: 12, Title: "SSO Providers", URL: "/sso-providers", SortOrder: 765, Icon: "Waypoints", PermissionCode: string(permission.PermissionClientRead), ParentID: &u20},
-		{ID: 13, Title: "Login Channels", URL: "/login-channels", SortOrder: 762, Icon: "Workflow", PermissionCode: string(permission.PermissionChannelRead), ParentID: &u20},
-		{ID: 14, Title: "Security Policies", URL: "/security-policies", SortOrder: 761, Icon: "ShieldAlert", PermissionCode: string(permission.PermissionPolicyRead), ParentID: &u20},
-		{ID: 15, Title: "Reference Options", URL: "/reference-options", SortOrder: 759, Icon: "ListTree", PermissionCode: string(permission.PermissionOptionRead), ParentID: &u20},
+		{ID: 4, Title: "Menu Sidebar", URL: "/menus", SortOrder: 790, Icon: "Menu", PermissionCode: permission.PermissionMenuRead, ParentID: &u20},
+		{ID: 5, Title: "Permission", URL: "/permissions", SortOrder: 780, Icon: "Key", PermissionCode: permission.PermissionPermRead, ParentID: &u20},
+		{ID: 9, Title: "OAuth Clients", URL: "/auth-clients", SortOrder: 770, Icon: "AppWindow", PermissionCode: permission.PermissionClientRead, ParentID: &u20},
+		{ID: 12, Title: "SSO Providers", URL: "/sso-providers", SortOrder: 765, Icon: "Waypoints", PermissionCode: permission.PermissionClientRead, ParentID: &u20},
+		{ID: 13, Title: "Login Channels", URL: "/login-channels", SortOrder: 762, Icon: "Workflow", PermissionCode: permission.Permission("channel.read"), ParentID: &u20},
+		{ID: 14, Title: "Security Policies", URL: "/security-policies", SortOrder: 761, Icon: "ShieldAlert", PermissionCode: permission.Permission("policy.read"), ParentID: &u20},
+		{ID: 15, Title: "Reference Options", URL: "/reference-options", SortOrder: 759, Icon: "ListTree", PermissionCode: permission.Permission("option.read"), ParentID: &u20},
 		{ID: 16, Title: "Docs & Guides", URL: "/docs", SortOrder: 758, Icon: "BookOpen", PermissionCode: "", ParentID: &u20},
-		{ID: 11, Title: "Service Accounts", URL: "/service-accounts", SortOrder: 760, Icon: "Bot", PermissionCode: string(permission.PermissionServiceRead), ParentID: &u20},
+		{ID: 11, Title: "Service Accounts", URL: "/service-accounts", SortOrder: 760, Icon: "Bot", PermissionCode: permission.Permission("service.read"), ParentID: &u20},
 
 		{ID: 30, Title: "Nhật ký", URL: "#", SortOrder: 500, Icon: "FileText", PermissionCode: ""},
-		{ID: 31, Title: "Lịch sử Login", URL: "/logs/auth", SortOrder: 490, Icon: "History", PermissionCode: string(permission.PermissionAuthRead), ParentID: &u30},
-		{ID: 32, Title: "Audit Log", URL: "/logs/audit", SortOrder: 480, Icon: "Activity", PermissionCode: string(permission.PermissionAuditRead), ParentID: &u30},
-		{ID: 33, Title: "Thiết bị", URL: "/devices", SortOrder: 470, Icon: "Smartphone", PermissionCode: string(permission.PermissionDeviceRead), ParentID: &u30},
+		{ID: 31, Title: "Lịch sử Login", URL: "/logs/auth", SortOrder: 490, Icon: "History", PermissionCode: permission.PermissionAuthRead, ParentID: &u30},
+		{ID: 32, Title: "Audit Log", URL: "/logs/audit", SortOrder: 480, Icon: "Activity", PermissionCode: permission.PermissionAuditRead, ParentID: &u30},
+		{ID: 33, Title: "Thiết bị", URL: "/devices", SortOrder: 470, Icon: "Smartphone", PermissionCode: permission.PermissionDeviceRead, ParentID: &u30},
 
-		{ID: 6, Title: "Cài đặt", URL: "/settings", SortOrder: 100, Icon: "Settings", PermissionCode: string(permission.PermissionSettingRead)},
+		{ID: 6, Title: "Cài đặt", URL: "/settings", SortOrder: 100, Icon: "Settings", PermissionCode: permission.PermissionSettingRead},
 	}
 
 	for _, m := range menus {
@@ -112,7 +53,7 @@ func SyncMenus(db *gorm.DB) {
 }
 
 func SyncSecurityPolicies(db *gorm.DB) {
-	policies := []GormSecurityPolicy{
+	policies := []domain.SecurityPolicy{
 		{
 			Code:        "global-auth-default",
 			Name:        "Global Auth Default",
@@ -234,7 +175,7 @@ func SyncSecurityPolicies(db *gorm.DB) {
 		},
 	}
 	for _, item := range policies {
-		var existing GormSecurityPolicy
+		var existing domain.SecurityPolicy
 		if err := db.Where("code = ?", item.Code).First(&existing).Error; err != nil {
 			db.Create(&item)
 		}
@@ -243,7 +184,7 @@ func SyncSecurityPolicies(db *gorm.DB) {
 }
 
 func SyncReferenceOptions(db *gorm.DB) {
-	items := []GormReferenceOption{
+	items := []domain.ReferenceOption{
 		{OptionGroup: "client_template", Value: "spa_web", Label: "SPA Web", Description: "Public SPA dùng authorization_code + PKCE", SortOrder: 10, Active: true, MetaJSON: `{"app_type":"web_app","public":true,"channels":["web"],"grants":["authorization_code","refresh_token"],"trusted_types":["browser"],"pkce_required":true,"audiences":["web-api"],"tags":["portal","spa"]}`},
 		{OptionGroup: "client_template", Value: "crm_portal", Label: "CRM Portal", Description: "Confidential client cho backoffice CRM", SortOrder: 20, Active: true, MetaJSON: `{"app_type":"admin_portal","public":false,"channels":["crm","web"],"grants":["authorization_code","refresh_token"],"trusted_types":["browser","desktop"],"pkce_required":false,"audiences":["crm-api"],"tags":["crm","backoffice"]}`},
 		{OptionGroup: "client_template", Value: "mobile_pkce", Label: "Mobile PKCE", Description: "Public mobile app dùng PKCE", SortOrder: 30, Active: true, MetaJSON: `{"app_type":"mobile_app","public":true,"channels":["mobile"],"grants":["authorization_code","refresh_token"],"trusted_types":["mobile"],"pkce_required":true,"audiences":["mobile-api"],"tags":["mobile","public"]}`},
@@ -291,7 +232,7 @@ func SyncReferenceOptions(db *gorm.DB) {
 		{OptionGroup: "channel_risk_level", Value: "high", Label: "High", SortOrder: 30, Active: true},
 	}
 	for _, item := range items {
-		var existing GormReferenceOption
+		var existing domain.ReferenceOption
 		if err := db.Where("option_group = ? AND value = ?", item.OptionGroup, item.Value).First(&existing).Error; err != nil {
 			db.Create(&item)
 		}
@@ -300,7 +241,7 @@ func SyncReferenceOptions(db *gorm.DB) {
 }
 
 func SyncAuthClients(db *gorm.DB) {
-	clients := []GormAuthClient{
+	clients := []domain.AuthClient{
 		{
 			ClientID:            "web_portal",
 			Name:                "Web Portal",
@@ -315,12 +256,12 @@ func SyncAuthClients(db *gorm.DB) {
 			Active:              true,
 			LegacyPasswordGrant: true,
 			ApprovalStatus:      "approved",
-			GrantTypesJSON:      `["password","refresh_token","authorization_code"]`,
-			RedirectURIsJSON:    `["https://app.company.com/callback"]`,
-			AudiencesJSON:       `["web-api"]`,
-			ChannelsJSON:        `["web"]`,
-			TrustedTypesJSON:    `["browser"]`,
-			TagsJSON:            `["portal","spa"]`,
+			GrantTypes:          []string{"password", "refresh_token", "authorization_code"},
+			RedirectURIs:        []string{"https://app.company.com/callback"},
+			Audiences:           []string{"web-api"},
+			Channels:            []string{"web"},
+			TrustedTypes:        []string{"browser"},
+			Tags:                []string{"portal", "spa"},
 			SecretVersion:       1,
 		},
 		{
@@ -338,12 +279,12 @@ func SyncAuthClients(db *gorm.DB) {
 			Active:              true,
 			LegacyPasswordGrant: true,
 			ApprovalStatus:      "approved",
-			GrantTypesJSON:      `["password","refresh_token","authorization_code"]`,
-			RedirectURIsJSON:    `["https://crm.company.com/callback"]`,
-			AudiencesJSON:       `["crm-api"]`,
-			ChannelsJSON:        `["crm","web"]`,
-			TrustedTypesJSON:    `["browser","desktop"]`,
-			TagsJSON:            `["crm","backoffice"]`,
+			GrantTypes:          []string{"password", "refresh_token", "authorization_code"},
+			RedirectURIs:        []string{"https://crm.company.com/callback"},
+			Audiences:           []string{"crm-api"},
+			Channels:            []string{"crm", "web"},
+			TrustedTypes:        []string{"browser", "desktop"},
+			Tags:                []string{"crm", "backoffice"},
 			SecretVersion:       1,
 		},
 		{
@@ -360,12 +301,12 @@ func SyncAuthClients(db *gorm.DB) {
 			Active:              true,
 			LegacyPasswordGrant: true,
 			ApprovalStatus:      "approved",
-			GrantTypesJSON:      `["password","refresh_token","authorization_code"]`,
-			RedirectURIsJSON:    `["myapp://oauth/callback"]`,
-			AudiencesJSON:       `["mobile-api"]`,
-			ChannelsJSON:        `["mobile"]`,
-			TrustedTypesJSON:    `["mobile"]`,
-			TagsJSON:            `["mobile","public"]`,
+			GrantTypes:          []string{"password", "refresh_token", "authorization_code"},
+			RedirectURIs:        []string{"myapp://oauth/callback"},
+			Audiences:           []string{"mobile-api"},
+			Channels:            []string{"mobile"},
+			TrustedTypes:        []string{"mobile"},
+			Tags:                []string{"mobile", "public"},
 			SecretVersion:       1,
 		},
 		{
@@ -383,17 +324,17 @@ func SyncAuthClients(db *gorm.DB) {
 			Active:              true,
 			LegacyPasswordGrant: false,
 			ApprovalStatus:      "approved",
-			GrantTypesJSON:      `["client_credentials"]`,
-			RedirectURIsJSON:    `[]`,
-			AudiencesJSON:       `["payment-api"]`,
-			ChannelsJSON:        `["service"]`,
-			TrustedTypesJSON:    `["server"]`,
-			TagsJSON:            `["service","payments"]`,
+			GrantTypes:          []string{"client_credentials"},
+			RedirectURIs:        []string{},
+			Audiences:           []string{"payment-api"},
+			Channels:            []string{"service"},
+			TrustedTypes:        []string{"server"},
+			Tags:                []string{"service", "payments"},
 			SecretVersion:       1,
 		},
 	}
 	for _, item := range clients {
-		var existing GormAuthClient
+		var existing domain.AuthClient
 		if err := db.Where("client_id = ?", item.ClientID).First(&existing).Error; err != nil {
 			db.Create(&item)
 		}
@@ -402,7 +343,7 @@ func SyncAuthClients(db *gorm.DB) {
 }
 
 func SyncLoginChannels(db *gorm.DB) {
-	channels := []GormLoginChannel{
+	channels := []domain.LoginChannel{
 		{Code: "web", Name: "Web Portal", Description: "Browser-based user login", RiskLevel: "medium", RequireMFA: false, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 720, SessionTTLMinutes: 1440, Active: true},
 		{Code: "crm", Name: "CRM Portal", Description: "Backoffice CRM login", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 336, SessionTTLMinutes: 720, Active: true},
 		{Code: "mobile", Name: "Mobile App", Description: "Native mobile application login", RiskLevel: "medium", RequireMFA: false, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 1440, SessionTTLMinutes: 43200, Active: true},
@@ -411,7 +352,7 @@ func SyncLoginChannels(db *gorm.DB) {
 		{Code: "partner", Name: "Partner Portal", Description: "External partner access", RiskLevel: "high", RequireMFA: true, AllowPassword: true, AllowSSO: true, TrustedDeviceTTLHours: 168, SessionTTLMinutes: 480, Active: true},
 	}
 	for _, item := range channels {
-		var existing GormLoginChannel
+		var existing domain.LoginChannel
 		if err := db.Where("code = ?", item.Code).First(&existing).Error; err != nil {
 			db.Create(&item)
 		}
@@ -420,9 +361,9 @@ func SyncLoginChannels(db *gorm.DB) {
 }
 
 // Seed inserts initial data if the DB is empty
-func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
+func Seed(db *gorm.DB, permRepo domain.PermissionRepository) {
 	var count int64
-	db.Model(&GormUser{}).Count(&count)
+	db.Model(&domain.User{}).Count(&count)
 	if count > 0 {
 		return
 	}
@@ -432,48 +373,29 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 	SyncMenus(db)
 
 	// ── Roles
-	roles := []GormRole{
-		{ID: 1, Name: "Super Admin", Description: "Toàn quyền hệ thống (*)", CreatedBy: "system"},
-		{ID: 2, Name: "Admin", Description: "Quản trị viên toàn tổ chức", CreatedBy: "system"},
-		{ID: 3, Name: "Manager", Description: "Quản lý phòng ban", CreatedBy: "system"},
-		{ID: 4, Name: "Operator", Description: "Vận hành viên", CreatedBy: "system"},
-		{ID: 5, Name: "Viewer", Description: "Chỉ xem dữ liệu của mình", CreatedBy: "system"},
+	roles := []domain.Role{
+		{ID: 1, Name: "Super Admin", Description: "Toàn quyền hệ thống (*)"},
+		{ID: 2, Name: "Admin", Description: "Quản trị viên toàn tổ chức"},
+		{ID: 3, Name: "Manager", Description: "Quản lý phòng ban"},
+		{ID: 4, Name: "Operator", Description: "Vận hành viên"},
+		{ID: 5, Name: "Viewer", Description: "Chỉ xem dữ liệu của mình"},
 	}
 	db.CreateInBatches(roles, 10)
 
 	// ── Super Admin gets wildcard permission
-	var wildcardPerm GormPermissionDef
+	var wildcardPerm domain.PermissionDef
 	if err := db.Where("code = ?", "*").First(&wildcardPerm).Error; err != nil {
-		wildcardPerm = GormPermissionDef{Code: "*", Name: "Wildcard (Super Admin)", GroupName: "system"}
+		wildcardPerm = domain.PermissionDef{Code: "*", Name: "Wildcard (Super Admin)", GroupName: "system"}
 		db.Create(&wildcardPerm)
 	}
-	db.Create(&GormRolePermission{RoleID: 1, PermissionID: wildcardPerm.ID, Scope: string(permission.ScopeGlobal)})
+	db.Exec("INSERT INTO sys_role_permissions (role_id, permission_id, scope) VALUES (?, ?, ?)", 1, wildcardPerm.ID, string(permission.ScopeGlobal))
 
 	// ── Admin gets all non-wildcard perms with organization scope
-	allPerms, _ := permRepo.FindAll()
+	allPerms, _ := permRepo.FindAll(context.Background())
 	for _, p := range allPerms {
 		if p.Code != permission.PermissionWildcard {
-			db.Create(&GormRolePermission{RoleID: 2, PermissionID: p.ID, Scope: string(permission.ScopeOrganization)})
+			db.Exec("INSERT INTO sys_role_permissions (role_id, permission_id, scope) VALUES (?, ?, ?)", 2, p.ID, string(permission.ScopeOrganization))
 		}
-	}
-
-	// ── Manager: user.read/update, report.view at department scope
-	var mgrPerms []GormPermissionDef
-	db.Where("code IN ?", []string{
-		string(permission.PermissionUserRead), string(permission.PermissionUserUpdate),
-		string(permission.PermissionReportView), string(permission.PermissionAuditRead),
-	}).Find(&mgrPerms)
-	for _, p := range mgrPerms {
-		db.Create(&GormRolePermission{RoleID: 3, PermissionID: p.ID, Scope: string(permission.ScopeDepartment)})
-	}
-
-	// ── Viewer: user.read, report.view at self scope
-	var viewerPerms []GormPermissionDef
-	db.Where("code IN ?", []string{
-		string(permission.PermissionUserRead), string(permission.PermissionReportView),
-	}).Find(&viewerPerms)
-	for _, p := range viewerPerms {
-		db.Create(&GormRolePermission{RoleID: 5, PermissionID: p.ID, Scope: string(permission.ScopeSelf)})
 	}
 
 	// ── Default users
@@ -481,42 +403,38 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 		h, _ := passwordsvc.Hash(pw)
 		return string(h)
 	}
-	passwordHistoryJSON := func(hash string) string {
-		payload, _ := json.Marshal([]string{hash})
-		return string(payload)
-	}
 	now := time.Now()
 	users := []struct {
-		user   GormUser
+		user   domain.User
 		roleID uint
 	}{
-		{func() GormUser {
+		{func() domain.User {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "superadmin", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), EmailVerified: true, Email: "superadmin@system.vn", FullName: "Super Administrator", Status: "active", LastLogin: &now}
+			return domain.User{Username: "superadmin", PasswordHash: hash, PasswordHistory: []string{hash}, EmailVerified: true, Email: "superadmin@system.vn", FullName: "Super Administrator", Status: "active", LastLogin: &now}
 		}(), 1},
-		{func() GormUser {
+		{func() domain.User {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "admin", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), AllowedClientsJSON: `["web_portal","crm_portal"]`, AllowedChannelsJSON: `["web","crm"]`, EmailVerified: true, Email: "admin@system.vn", FullName: "Administrator", Status: "active"}
+			return domain.User{Username: "admin", PasswordHash: hash, PasswordHistory: []string{hash}, AllowedClients: []string{"web_portal", "crm_portal"}, AllowedChannels: []string{"web", "crm"}, EmailVerified: true, Email: "admin@system.vn", FullName: "Administrator", Status: "active"}
 		}(), 2},
-		{func() GormUser {
+		{func() domain.User {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "manager", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), AllowedClientsJSON: `["web_portal","crm_portal"]`, AllowedChannelsJSON: `["web","crm"]`, EmailVerified: true, Email: "manager@system.vn", FullName: "Nguyễn Văn Quản Lý", Status: "active"}
+			return domain.User{Username: "manager", PasswordHash: hash, PasswordHistory: []string{hash}, AllowedClients: []string{"web_portal", "crm_portal"}, AllowedChannels: []string{"web", "crm"}, EmailVerified: true, Email: "manager@system.vn", FullName: "Nguyễn Văn Quản Lý", Status: "active"}
 		}(), 3},
-		{func() GormUser {
+		{func() domain.User {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "operator", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), AllowedClientsJSON: `["web_portal"]`, AllowedChannelsJSON: `["web"]`, EmailVerified: true, Email: "operator@system.vn", FullName: "Trần Thị Vận Hành", Status: "active"}
+			return domain.User{Username: "operator", PasswordHash: hash, PasswordHistory: []string{hash}, AllowedClients: []string{"web_portal"}, AllowedChannels: []string{"web"}, EmailVerified: true, Email: "operator@system.vn", FullName: "Trần Thị Vận Hành", Status: "active"}
 		}(), 4},
-		{func() GormUser {
+		{func() domain.User {
 			hash := hashPw("Admin@123")
-			return GormUser{Username: "viewer", PasswordHash: hash, PasswordHistoryJSON: passwordHistoryJSON(hash), AllowedClientsJSON: `["mobile_app_tpv_public"]`, AllowedChannelsJSON: `["mobile"]`, EmailVerified: true, Email: "viewer@system.vn", FullName: "Lê Văn Chỉ Xem", Status: "active"}
+			return domain.User{Username: "viewer", PasswordHash: hash, PasswordHistory: []string{hash}, AllowedClients: []string{"mobile_app_tpv_public"}, AllowedChannels: []string{"mobile"}, EmailVerified: true, Email: "viewer@system.vn", FullName: "Lê Văn Chỉ Xem", Status: "active"}
 		}(), 5},
 	}
 	for _, u := range users {
 		db.Create(&u.user)
-		db.Create(&GormUserRole{UserID: u.user.ID, RoleID: u.roleID})
+		db.Exec("INSERT INTO sys_user_roles (user_id, role_id) VALUES (?, ?)", u.user.ID, u.roleID)
 	}
 
-	providers := []GormSSOProvider{
+	providers := []domain.SSOProvider{
 		{
 			ProviderID:         "google",
 			Name:               "Google Workspace",
@@ -570,42 +488,10 @@ func Seed(db *gorm.DB, permRepo *GormPermissionRepository) {
 
 // ResetSequences resets PostgreSQL SERIAL sequences to the max ID found in each table.
 // This is necessary after seeding records with manual ID values.
-func ResetSequences(db *gorm.DB) {
-	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_auth_clients", "sys_sso_providers", "sys_login_channels", "sys_security_policies", "sys_audit_logs", "sys_auth_histories"}
-	for _, table := range tables {
-		db.Exec(fmt.Sprintf("SELECT setval(pg_get_serial_sequence('%s', 'id'), COALESCE((SELECT MAX(id) FROM %s), 1))", table, table))
-	}
-	log.Println("✅ Primary key sequences reset")
-}
-
-// ─── Permission loader (implements middleware.PermissionLoader) ───────────────
-
-type PermLoader struct{ db *gorm.DB }
-
-func NewPermLoader(db *gorm.DB) *PermLoader { return &PermLoader{db} }
-
-func (l *PermLoader) LoadForUser(userID uint) ([]*domain.RolePermission, error) {
-	type row struct {
-		Code  string
-		Scope string
-	}
-	var rows []row
-	err := l.db.Raw(`
-		SELECT pd.code, rp.scope
-		FROM sys_role_permissions rp
-		JOIN sys_permission_defs pd ON pd.id = rp.permission_id AND pd.deleted = false
-		JOIN sys_user_roles ur ON ur.role_id = rp.role_id AND ur.deleted = false
-		WHERE ur.user_id = ? AND rp.deleted = false
-	`, userID).Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	result := make([]*domain.RolePermission, len(rows))
-	for i, r := range rows {
-		result[i] = &domain.RolePermission{
-			Code:  permission.Permission(r.Code),
-			Scope: permission.Scope(r.Scope),
-		}
-	}
-	return result, nil
-}
+// func ResetSequences(db *gorm.DB) {
+// 	tables := []string{"sys_users", "sys_roles", "sys_menus", "sys_permission_defs", "sys_role_permissions", "sys_user_roles", "sys_auth_clients", "sys_sso_providers", "sys_login_channels", "sys_security_policies", "sys_audit_logs", "sys_auth_histories"}
+// 	for _, table := range tables {
+// 		db.Exec(fmt.Sprintf("SELECT setval(pg_get_serial_sequence('%s', 'id'), COALESCE((SELECT MAX(id) FROM %s), 1))", table, table))
+// 	}
+// 	log.Println("✅ Primary key sequences reset")
+// }

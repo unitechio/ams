@@ -3,13 +3,13 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sort"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/owner/auth-server/internal/authorization/authz"
 	"github.com/owner/auth-server/internal/authorization/permission"
 	"github.com/owner/auth-server/internal/domain"
 	jwtpkg "github.com/owner/auth-server/internal/jwt"
@@ -24,69 +24,7 @@ type PermissionLoader interface {
 }
 
 type StepUpPolicyRepository interface {
-	List(filters map[string]interface{}) ([]*domain.SecurityPolicy, int64, error)
-}
-
-// ─── Auth Middleware ──────────────────────────────────────────────────────────
-
-// Authenticate validates the Bearer JWT and injects:
-// - user ID, username into context
-// - PermissionSet (built from DB permissions) into context
-//
-// IMPORTANT: permissions are loaded from DB on every request or from cache.
-// We NEVER trust permissions embedded in the JWT payload (which can be stale).
-func Authenticate(jwtSvc *jwtpkg.Service, loader PermissionLoader) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if header == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, errorResponse("Chưa xác thực"))
-			return
-		}
-
-		parts := strings.SplitN(header, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, errorResponse("Token không hợp lệ"))
-			return
-		}
-
-		claims, err := jwtSvc.ValidateToken(parts[1])
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, errorResponse(err.Error()))
-			return
-		}
-
-		// Load fresh permissions from DB (source of truth)
-		rolePerms, err := loader.LoadForUser(claims.UserID)
-		if err != nil {
-			c.AbortWithStatusJSON(http.StatusInternalServerError, errorResponse("Lỗi tải quyền hạn"))
-			return
-		}
-
-		// Build PermissionSet
-		eps := make([]permission.EffectivePermission, len(rolePerms))
-		for i, rp := range rolePerms {
-			eps[i] = permission.EffectivePermission{
-				Permission: rp.Code,
-				Scope:      rp.Scope,
-			}
-		}
-		ps := permission.NewPermissionSet(eps)
-
-		// Inject into Gin context
-		c.Set("userID", claims.UserID)
-		c.Set("username", claims.Username)
-		c.Set("sessionID", claims.SessionID)
-		c.Set("clientID", claims.ClientID)
-		c.Set("permissionSet", ps)
-
-		// Also inject into request context for use in service/usecase layer
-		ctx := authz.WithUserID(c.Request.Context(), claims.UserID)
-		ctx = authz.WithUsername(ctx, claims.Username)
-		ctx = authz.WithPermissionSet(ctx, ps)
-		c.Request = c.Request.WithContext(ctx)
-
-		c.Next()
-	}
+	List(ctx context.Context, filters map[string]interface{}) ([]*domain.SecurityPolicy, int64, error)
 }
 
 // ─── Permission Guard Middleware ──────────────────────────────────────────────
@@ -177,30 +115,6 @@ func InjectScope(p permission.Permission) gin.HandlerFunc {
 
 // ─── Context Helpers ──────────────────────────────────────────────────────────
 
-func GetUserID(c *gin.Context) uint {
-	val, _ := c.Get("userID")
-	id, _ := val.(uint)
-	return id
-}
-
-func GetUsername(c *gin.Context) string {
-	val, _ := c.Get("username")
-	s, _ := val.(string)
-	return s
-}
-
-func GetSessionID(c *gin.Context) string {
-	val, _ := c.Get("sessionID")
-	s, _ := val.(string)
-	return s
-}
-
-func GetClientID(c *gin.Context) string {
-	val, _ := c.Get("clientID")
-	s, _ := val.(string)
-	return s
-}
-
 func RequireStepUp(jwtSvc *jwtpkg.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := strings.TrimSpace(c.GetHeader("X-Step-Up-Token"))
@@ -254,7 +168,7 @@ type stepUpPolicyConfig struct {
 }
 
 func resolveStepUpRequirement(repo StepUpPolicyRepository, clientID, action string) (bool, bool) {
-	items, _, err := repo.List(map[string]interface{}{
+	items, _, err := repo.List(context.Background(), map[string]interface{}{
 		"policy_type":   "step_up",
 		"target_action": action,
 		"active":        "true",

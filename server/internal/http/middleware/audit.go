@@ -6,12 +6,13 @@ import (
 	"net/http"
 	"time"
 
+	"context"
 	"github.com/gin-gonic/gin"
 	"github.com/owner/auth-server/internal/domain"
 )
 
 type AuditLogger interface {
-	Save(log *domain.AuditLog) error
+	Save(ctx context.Context, log *domain.AuditLog) error
 }
 
 type responseWriter struct {
@@ -72,6 +73,6 @@ func Audit(logger AuditLogger) gin.HandlerFunc {
 		}
 
 		// Save log (non-blocking if possible, but here we do it simple)
-		go logger.Save(auditLog)
+		go logger.Save(context.Background(), auditLog)
 	}
 }
